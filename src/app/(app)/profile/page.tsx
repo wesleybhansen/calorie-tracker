@@ -120,7 +120,7 @@ export default function ProfilePage() {
   const [trainingFat, setTrainingFat] = useState(70);
 
   // ─── Meal types state ───────────────────────────────────────────
-  const [mealTypes, setMealTypes] = useState<string[]>([]);
+  const [mealTypes, setMealTypes] = useState<string[]>(["Breakfast", "Lunch", "Dinner", "Snack"]);
   const [newMealType, setNewMealType] = useState("");
 
   // ─── AI settings state ──────────────────────────────────────────
@@ -655,11 +655,6 @@ export default function ProfilePage() {
           )}
 
           {/* Draggable meal type list */}
-          {!isLoading && mealTypes.length === 0 && (
-            <p className="py-3 text-center text-sm text-text-tertiary">
-              No meal types configured. Add one below.
-            </p>
-          )}
           <div className="flex flex-col gap-1.5">
             {mealTypes.map((type, index) => (
               <motion.div
