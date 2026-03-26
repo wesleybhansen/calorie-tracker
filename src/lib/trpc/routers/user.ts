@@ -52,8 +52,11 @@ export const userRouter = createTRPCRouter({
 
         // Handle mealTypes separately via raw SQL since jsonb can be tricky with Drizzle
         if (input.mealTypes !== undefined) {
+          const jsonValue = JSON.stringify(input.mealTypes);
           await ctx.db.execute(
-            sql`UPDATE profiles SET meal_types = ${JSON.stringify(input.mealTypes)}::jsonb, updated_at = now() WHERE id = ${ctx.user.id}`
+            sql.raw(
+              `UPDATE profiles SET meal_types = '${jsonValue.replace(/'/g, "''")}'::jsonb, updated_at = now() WHERE id = '${ctx.user.id}'`
+            )
           );
           // If only mealTypes was provided, return early
           if (Object.keys(data).length === 1) {
