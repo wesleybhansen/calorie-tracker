@@ -8,7 +8,8 @@ import { ActivityRings } from "@/components/dashboard/activity-rings";
 import { DateSelector } from "@/components/dashboard/date-selector";
 import { MealSection, type FoodEntry } from "@/components/dashboard/meal-section";
 import { MacroSummary } from "@/components/dashboard/macro-summary";
-import { QuickAddFAB } from "@/components/dashboard/quick-add-fab";
+import { QuickAddSheet } from "@/components/quick-add/quick-add-sheet";
+import { motion } from "motion/react";
 
 // ─── Skeleton shimmer ────────────────────────────────────────────
 
@@ -52,8 +53,18 @@ const DEFAULT_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
 // ─── Page ────────────────────────────────────────────────────────
 
+function getMealTypeFromHour(): string {
+  const hour = new Date().getHours();
+  if (hour < 11) return "Breakfast";
+  if (hour < 15) return "Lunch";
+  if (hour < 20) return "Dinner";
+  return "Snack";
+}
+
 export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [quickAddOpen, setQuickAddOpen] = useState(false);
+  const [quickAddMealType, setQuickAddMealType] = useState(getMealTypeFromHour);
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const utils = trpc.useUtils();
 
@@ -205,13 +216,37 @@ export default function DashboardPage() {
                   entries={entries}
                   totalCalories={totalCalories}
                   onDeleteEntry={handleDeleteEntry}
+                  onAddFood={() => {
+                    setQuickAddMealType(mt);
+                    setQuickAddOpen(true);
+                  }}
                 />
               );
             })}
       </div>
 
       {/* FAB */}
-      <QuickAddFAB selectedDate={selectedDate} />
+      <motion.button
+        onClick={() => {
+          setQuickAddMealType(getMealTypeFromHour());
+          setQuickAddOpen(true);
+        }}
+        className="fixed bottom-24 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full shadow-lg shadow-primary/25"
+        style={{ backgroundColor: "#6366F1" }}
+        whileTap={{ scale: 0.9 }}
+        transition={{ type: "spring", stiffness: 300, damping: 30 }}
+      >
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round">
+          <path d="M12 5v14M5 12h14" />
+        </svg>
+      </motion.button>
+
+      <QuickAddSheet
+        open={quickAddOpen}
+        onOpenChange={setQuickAddOpen}
+        selectedDate={selectedDate}
+        defaultMealType={quickAddMealType}
+      />
     </div>
   );
 }
