@@ -16,48 +16,52 @@ export const dailyRouter = createTRPCRouter({
   get: protectedProcedure
     .input(z.object({ date: z.string() }))
     .query(async ({ ctx, input }) => {
-      // Sum totals from meal_log_entries for the date
-      const [totals] = await ctx.db
-        .select({
-          calories: sql<number>`coalesce(sum(${mealLogEntries.calories}::numeric), 0)`,
-          proteinG: sql<number>`coalesce(sum(${mealLogEntries.proteinG}::numeric), 0)`,
-          carbsG: sql<number>`coalesce(sum(${mealLogEntries.carbsG}::numeric), 0)`,
-          fatG: sql<number>`coalesce(sum(${mealLogEntries.fatG}::numeric), 0)`,
-          fiberG: sql<number>`coalesce(sum(${mealLogEntries.fiberG}::numeric), 0)`,
-        })
-        .from(mealLogEntries)
-        .innerJoin(mealLogs, eq(mealLogEntries.mealLogId, mealLogs.id))
-        .where(
-          and(
-            eq(mealLogs.userId, ctx.user.id),
-            eq(mealLogs.date, input.date),
+      // Run all 3 queries in parallel instead of sequential
+      const [totalsResult, profileResult, summaryResult] = await Promise.all([
+        ctx.db
+          .select({
+            calories: sql<number>`coalesce(sum(${mealLogEntries.calories}::numeric), 0)`,
+            proteinG: sql<number>`coalesce(sum(${mealLogEntries.proteinG}::numeric), 0)`,
+            carbsG: sql<number>`coalesce(sum(${mealLogEntries.carbsG}::numeric), 0)`,
+            fatG: sql<number>`coalesce(sum(${mealLogEntries.fatG}::numeric), 0)`,
+            fiberG: sql<number>`coalesce(sum(${mealLogEntries.fiberG}::numeric), 0)`,
+          })
+          .from(mealLogEntries)
+          .innerJoin(mealLogs, eq(mealLogEntries.mealLogId, mealLogs.id))
+          .where(
+            and(
+              eq(mealLogs.userId, ctx.user.id),
+              eq(mealLogs.date, input.date),
+            ),
           ),
-        );
+        ctx.db
+          .select({
+            dailyCalorieTarget: profiles.dailyCalorieTarget,
+            proteinTargetG: profiles.proteinTargetG,
+            carbsTargetG: profiles.carbsTargetG,
+            fatTargetG: profiles.fatTargetG,
+            fiberTargetG: profiles.fiberTargetG,
+            mealTypes: profiles.mealTypes,
+            encryptedApiKey: profiles.encryptedApiKey,
+          })
+          .from(profiles)
+          .where(eq(profiles.id, ctx.user.id))
+          .limit(1),
+        ctx.db
+          .select({ weightKg: dailySummaries.weightKg })
+          .from(dailySummaries)
+          .where(
+            and(
+              eq(dailySummaries.userId, ctx.user.id),
+              eq(dailySummaries.date, input.date),
+            ),
+          )
+          .limit(1),
+      ]);
 
-      // Get user targets from profiles
-      const [profile] = await ctx.db
-        .select({
-          dailyCalorieTarget: profiles.dailyCalorieTarget,
-          proteinTargetG: profiles.proteinTargetG,
-          carbsTargetG: profiles.carbsTargetG,
-          fatTargetG: profiles.fatTargetG,
-          fiberTargetG: profiles.fiberTargetG,
-        })
-        .from(profiles)
-        .where(eq(profiles.id, ctx.user.id))
-        .limit(1);
-
-      // Get weight from daily_summaries if it exists
-      const [summary] = await ctx.db
-        .select({ weightKg: dailySummaries.weightKg })
-        .from(dailySummaries)
-        .where(
-          and(
-            eq(dailySummaries.userId, ctx.user.id),
-            eq(dailySummaries.date, input.date),
-          ),
-        )
-        .limit(1);
+      const totals = totalsResult[0];
+      const profile = profileResult[0];
+      const summary = summaryResult[0];
 
       return {
         consumed: {
@@ -75,6 +79,8 @@ export const dailyRouter = createTRPCRouter({
           fiberG: profile?.fiberTargetG ?? 25,
         },
         weight: summary?.weightKg ? Number(summary.weightKg) : null,
+        mealTypes: (profile?.mealTypes as string[] | null) ?? ["Breakfast", "Lunch", "Dinner", "Snack"],
+        hasAiKey: !!profile?.encryptedApiKey,
       };
     }),
 

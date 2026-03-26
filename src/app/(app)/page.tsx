@@ -231,8 +231,8 @@ export default function DashboardPage() {
   // ─── Queries ─────────────────────────────────────────────────
   const dailyQuery = trpc.daily.get.useQuery({ date: dateStr });
   const mealsQuery = trpc.meals.getByDate.useQuery({ date: dateStr });
-  const profileQuery = trpc.user.getProfile.useQuery();
-  const hasAiKey = !!profileQuery.data?.encryptedApiKey;
+  // Profile data comes from daily.get now (mealTypes + hasAiKey)
+  const hasAiKey = !!dailyQuery.data?.hasAiKey;
 
   // ─── Mutations ───────────────────────────────────────────────
   const deleteEntry = trpc.meals.deleteEntry.useMutation({
@@ -322,7 +322,7 @@ export default function DashboardPage() {
   }, [trainingEnabled, isTraining, trainingTargets, serverTargets]);
 
   // Use profile meal types (ordered by user) or fallback
-  const userMealTypes: string[] = profileQuery.data?.mealTypes ?? FALLBACK_MEAL_TYPES;
+  const userMealTypes: string[] = dailyQuery.data?.mealTypes ?? FALLBACK_MEAL_TYPES;
 
   // Build meal sections from API data
   const mealSections = useMemo(() => {

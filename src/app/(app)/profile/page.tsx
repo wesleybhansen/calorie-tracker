@@ -645,7 +645,21 @@ export default function ProfilePage() {
             Drag to reorder. Tap the pencil to rename. This controls the meals shown on your tracking page.
           </p>
 
+          {/* Loading state */}
+          {isLoading && (
+            <div className="flex flex-col gap-1.5">
+              {[1, 2, 3, 4].map((i) => (
+                <Skeleton key={i} className="h-11 w-full rounded-xl" />
+              ))}
+            </div>
+          )}
+
           {/* Draggable meal type list */}
+          {!isLoading && mealTypes.length === 0 && (
+            <p className="py-3 text-center text-sm text-text-tertiary">
+              No meal types configured. Add one below.
+            </p>
+          )}
           <div className="flex flex-col gap-1.5">
             {mealTypes.map((type, index) => (
               <motion.div
