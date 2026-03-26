@@ -243,7 +243,10 @@ export default function ProfilePage() {
       { mealTypes: updated },
       {
         onSuccess: () => toast.success("Meal types updated"),
-        onError: () => toast.error("Failed to update meal types"),
+        onError: (err) => {
+          console.error("Meal type update error:", err);
+          toast.error(`Failed: ${err.message}`);
+        },
       },
     );
   };

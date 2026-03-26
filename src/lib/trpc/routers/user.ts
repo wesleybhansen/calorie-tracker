@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -36,26 +36,42 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Only include fields that were actually provided (not undefined)
-      const setData: Record<string, unknown> = { updatedAt: new Date() };
-      if (input.displayName !== undefined) setData.displayName = input.displayName;
-      if (input.avatarUrl !== undefined) setData.avatarUrl = input.avatarUrl;
-      if (input.dailyCalorieTarget !== undefined) setData.dailyCalorieTarget = input.dailyCalorieTarget;
-      if (input.proteinTargetG !== undefined) setData.proteinTargetG = input.proteinTargetG;
-      if (input.carbsTargetG !== undefined) setData.carbsTargetG = input.carbsTargetG;
-      if (input.fatTargetG !== undefined) setData.fatTargetG = input.fatTargetG;
-      if (input.fiberTargetG !== undefined) setData.fiberTargetG = input.fiberTargetG;
-      if (input.mealTypes !== undefined) setData.mealTypes = input.mealTypes;
-      if (input.aiProvider !== undefined) setData.aiProvider = input.aiProvider;
-      if (input.encryptedApiKey !== undefined) setData.encryptedApiKey = input.encryptedApiKey;
-      if (input.units !== undefined) setData.units = input.units;
+      try {
+        // Build set object, only including provided fields
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data: any = { updatedAt: new Date() };
+        if (input.displayName !== undefined) data.displayName = input.displayName;
+        if (input.dailyCalorieTarget !== undefined) data.dailyCalorieTarget = input.dailyCalorieTarget;
+        if (input.proteinTargetG !== undefined) data.proteinTargetG = input.proteinTargetG;
+        if (input.carbsTargetG !== undefined) data.carbsTargetG = input.carbsTargetG;
+        if (input.fatTargetG !== undefined) data.fatTargetG = input.fatTargetG;
+        if (input.fiberTargetG !== undefined) data.fiberTargetG = input.fiberTargetG;
+        if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
+        if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
+        if (input.units !== undefined) data.units = input.units;
 
-      const [updated] = await ctx.db
-        .update(profiles)
-        .set(setData)
-        .where(eq(profiles.id, ctx.user.id))
-        .returning();
+        // Handle mealTypes separately via raw SQL since jsonb can be tricky with Drizzle
+        if (input.mealTypes !== undefined) {
+          await ctx.db.execute(
+            sql`UPDATE profiles SET meal_types = ${JSON.stringify(input.mealTypes)}::jsonb, updated_at = now() WHERE id = ${ctx.user.id}`
+          );
+          // If only mealTypes was provided, return early
+          if (Object.keys(data).length === 1) {
+            const [profile] = await ctx.db.select().from(profiles).where(eq(profiles.id, ctx.user.id)).limit(1);
+            return profile;
+          }
+        }
 
-      return updated;
+        const [updated] = await ctx.db
+          .update(profiles)
+          .set(data)
+          .where(eq(profiles.id, ctx.user.id))
+          .returning();
+
+        return updated;
+      } catch (error) {
+        console.error("updateProfile error:", error);
+        throw error;
+      }
     }),
 });
