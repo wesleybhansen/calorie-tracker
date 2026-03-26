@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
 } from "../init";
 import { profiles } from "@/db/schema";
+import { pgClient } from "@/db";
 
 export const userRouter = createTRPCRouter({
   // ─── get profile ───────────────────────────────────────────────
@@ -37,7 +38,24 @@ export const userRouter = createTRPCRouter({
     )
     .mutation(async ({ ctx, input }) => {
       try {
-        // Build set object, only including provided fields
+        // Handle mealTypes with raw postgres client (bypasses Drizzle jsonb issues)
+        if (input.mealTypes !== undefined) {
+          await pgClient`
+            UPDATE profiles
+            SET meal_types = ${JSON.stringify(input.mealTypes)}::jsonb,
+                updated_at = now()
+            WHERE id = ${ctx.user.id}
+          `;
+
+          // If only mealTypes was provided, return early
+          const otherKeys = Object.keys(input).filter(k => k !== 'mealTypes');
+          if (otherKeys.length === 0) {
+            const [profile] = await ctx.db.select().from(profiles).where(eq(profiles.id, ctx.user.id)).limit(1);
+            return profile;
+          }
+        }
+
+        // Handle all other fields via Drizzle
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data: any = { updatedAt: new Date() };
         if (input.displayName !== undefined) data.displayName = input.displayName;
@@ -49,21 +67,6 @@ export const userRouter = createTRPCRouter({
         if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
         if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
         if (input.units !== undefined) data.units = input.units;
-
-        // Handle mealTypes separately via raw SQL since jsonb can be tricky with Drizzle
-        if (input.mealTypes !== undefined) {
-          const jsonValue = JSON.stringify(input.mealTypes);
-          await ctx.db.execute(
-            sql.raw(
-              `UPDATE profiles SET meal_types = '${jsonValue.replace(/'/g, "''")}'::jsonb, updated_at = now() WHERE id = '${ctx.user.id}'`
-            )
-          );
-          // If only mealTypes was provided, return early
-          if (Object.keys(data).length === 1) {
-            const [profile] = await ctx.db.select().from(profiles).where(eq(profiles.id, ctx.user.id)).limit(1);
-            return profile;
-          }
-        }
 
         const [updated] = await ctx.db
           .update(profiles)
