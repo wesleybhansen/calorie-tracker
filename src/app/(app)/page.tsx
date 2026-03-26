@@ -114,7 +114,7 @@ function MealSkeleton() {
 
 // ─── Default meal types ──────────────────────────────────────────
 
-const DEFAULT_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack"];
+const FALLBACK_MEAL_TYPES = ["Breakfast", "Lunch", "Dinner", "Snack"];
 
 // ─── Page ────────────────────────────────────────────────────────
 
@@ -265,7 +265,7 @@ export default function DashboardPage() {
 
   const handleCopyYesterday = useCallback(async () => {
     const yesterdayStr = format(subDays(selectedDate, 1), "yyyy-MM-dd");
-    const promises = DEFAULT_MEAL_TYPES.map((mt) =>
+    const promises = userMealTypes.map((mt) =>
       copyMeal.mutateAsync({
         fromDate: yesterdayStr,
         fromMealType: mt,
@@ -321,12 +321,15 @@ export default function DashboardPage() {
     return serverTargets;
   }, [trainingEnabled, isTraining, trainingTargets, serverTargets]);
 
+  // Use profile meal types (ordered by user) or fallback
+  const userMealTypes: string[] = profileQuery.data?.mealTypes ?? FALLBACK_MEAL_TYPES;
+
   // Build meal sections from API data
   const mealSections = useMemo(() => {
     const grouped = mealsQuery.data ?? {};
     const sections: Record<string, FoodEntry[]> = {};
 
-    for (const mt of DEFAULT_MEAL_TYPES) {
+    for (const mt of userMealTypes) {
       sections[mt] = [];
     }
 
@@ -355,7 +358,7 @@ export default function DashboardPage() {
     }
 
     return sections;
-  }, [mealsQuery.data]);
+  }, [mealsQuery.data, userMealTypes]);
 
   const isLoading = dailyQuery.isLoading || mealsQuery.isLoading;
 
@@ -365,17 +368,14 @@ export default function DashboardPage() {
   );
   const showCopyYesterday = isToday(selectedDate) && totalEntries === 0 && !isLoading;
 
+  // Show user's meal types (in their order) + any extra types from logged data
   const visibleMealTypes = useMemo(() => {
-    const allTypes = new Set(DEFAULT_MEAL_TYPES);
+    const ordered = [...userMealTypes];
     for (const mt of Object.keys(mealSections)) {
-      allTypes.add(mt);
-    }
-    const ordered = [...DEFAULT_MEAL_TYPES];
-    for (const mt of allTypes) {
       if (!ordered.includes(mt)) ordered.push(mt);
     }
     return ordered;
-  }, [mealSections]);
+  }, [userMealTypes, mealSections]);
 
   return (
     <div className="flex flex-col gap-6 pt-4 pb-4">
@@ -514,7 +514,7 @@ export default function DashboardPage() {
         {/* Meal sections */}
         <div className="flex flex-col gap-3">
           {isLoading
-            ? DEFAULT_MEAL_TYPES.map((mt) => <MealSkeleton key={mt} />)
+            ? userMealTypes.map((mt) => <MealSkeleton key={mt} />)
             : visibleMealTypes.map((mt) => {
                 const entries = mealSections[mt] ?? [];
                 const totalCalories = entries.reduce(

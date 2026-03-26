@@ -24,6 +24,9 @@ import {
   Dumbbell,
   Bell,
   Clock,
+  GripVertical,
+  Pencil,
+  Check,
 } from "lucide-react";
 
 // ─── Skeleton loader ──────────────────────────────────────────────
@@ -229,31 +232,72 @@ export default function ProfilePage() {
     );
   };
 
-  const handleAddMealType = () => {
-    const trimmed = newMealType.trim();
-    if (!trimmed || mealTypes.includes(trimmed)) return;
-    const updated = [...mealTypes, trimmed];
+  const [editingMealIndex, setEditingMealIndex] = useState<number | null>(null);
+  const [editingMealName, setEditingMealName] = useState("");
+  const [draggedMealIndex, setDraggedMealIndex] = useState<number | null>(null);
+  const [dragOverMealIndex, setDragOverMealIndex] = useState<number | null>(null);
+
+  const saveMealTypes = (updated: string[]) => {
     setMealTypes(updated);
-    setNewMealType("");
     updateProfile.mutate(
       { mealTypes: updated },
       {
-        onSuccess: () => toast.success("Meal type added"),
+        onSuccess: () => toast.success("Meal types updated"),
         onError: () => toast.error("Failed to update meal types"),
       },
     );
   };
 
+  const handleAddMealType = () => {
+    const trimmed = newMealType.trim();
+    if (!trimmed || mealTypes.includes(trimmed)) return;
+    saveMealTypes([...mealTypes, trimmed]);
+    setNewMealType("");
+  };
+
   const handleRemoveMealType = (type: string) => {
-    const updated = mealTypes.filter((t) => t !== type);
-    setMealTypes(updated);
-    updateProfile.mutate(
-      { mealTypes: updated },
-      {
-        onSuccess: () => toast.success("Meal type removed"),
-        onError: () => toast.error("Failed to update meal types"),
-      },
-    );
+    saveMealTypes(mealTypes.filter((t) => t !== type));
+  };
+
+  const handleRenameMealType = (index: number) => {
+    const trimmed = editingMealName.trim();
+    if (!trimmed || (trimmed !== mealTypes[index] && mealTypes.includes(trimmed))) {
+      setEditingMealIndex(null);
+      return;
+    }
+    const updated = [...mealTypes];
+    updated[index] = trimmed;
+    saveMealTypes(updated);
+    setEditingMealIndex(null);
+  };
+
+  const handleMealDragStart = (index: number) => {
+    setDraggedMealIndex(index);
+  };
+
+  const handleMealDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    if (draggedMealIndex === null || draggedMealIndex === index) return;
+    setDragOverMealIndex(index);
+  };
+
+  const handleMealDrop = (index: number) => {
+    if (draggedMealIndex === null || draggedMealIndex === index) {
+      setDraggedMealIndex(null);
+      setDragOverMealIndex(null);
+      return;
+    }
+    const updated = [...mealTypes];
+    const [moved] = updated.splice(draggedMealIndex, 1);
+    updated.splice(index, 0, moved);
+    saveMealTypes(updated);
+    setDraggedMealIndex(null);
+    setDragOverMealIndex(null);
+  };
+
+  const handleMealDragEnd = () => {
+    setDraggedMealIndex(null);
+    setDragOverMealIndex(null);
   };
 
   const handleSaveApiKey = () => {
@@ -597,31 +641,95 @@ export default function ProfilePage() {
       {/* ─── Meal Types Section ──────────────────────────────────── */}
       <SectionCard icon={<Utensils size={16} />} title="Meal Types">
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap gap-2">
-            {mealTypes.map((type) => (
-              <motion.span
-                key={type}
+          <p className="text-xs text-text-tertiary">
+            Drag to reorder. Tap the pencil to rename. This controls the meals shown on your tracking page.
+          </p>
+
+          {/* Draggable meal type list */}
+          <div className="flex flex-col gap-1.5">
+            {mealTypes.map((type, index) => (
+              <motion.div
+                key={`${type}-${index}`}
                 layout
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-surface-2 px-3 py-1.5 text-sm text-text-primary"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{
+                  opacity: draggedMealIndex !== null && draggedMealIndex === index ? 0.5 : 1,
+                  x: 0,
+                  scale: dragOverMealIndex === index ? 1.02 : 1,
+                }}
+                transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                draggable
+                onDragStart={() => handleMealDragStart(index)}
+                onDragOver={(e) => handleMealDragOver(e as unknown as React.DragEvent, index)}
+                onDrop={() => handleMealDrop(index)}
+                onDragEnd={handleMealDragEnd}
+                className={`flex items-center gap-2 rounded-xl px-2 py-2.5 transition-colors ${
+                  dragOverMealIndex === index
+                    ? "bg-primary/10 border border-primary/20"
+                    : "bg-surface-2 border border-transparent"
+                }`}
               >
-                {type}
-                <button
-                  onClick={() => handleRemoveMealType(type)}
-                  className="flex h-4 w-4 items-center justify-center rounded-full text-text-tertiary transition-colors hover:bg-surface-3 hover:text-text-primary"
-                >
-                  <X size={12} />
-                </button>
-              </motion.span>
+                {/* Drag handle */}
+                <div className="cursor-grab touch-none text-text-disabled active:cursor-grabbing">
+                  <GripVertical size={16} />
+                </div>
+
+                {/* Name (view or edit mode) */}
+                {editingMealIndex === index ? (
+                  <div className="flex flex-1 items-center gap-1.5">
+                    <Input
+                      value={editingMealName}
+                      onChange={(e) => setEditingMealName(e.target.value)}
+                      className="h-8 flex-1 bg-surface-3 border-none text-sm"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") handleRenameMealType(index);
+                        if (e.key === "Escape") setEditingMealIndex(null);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleRenameMealType(index)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-success transition-colors hover:bg-success/10"
+                    >
+                      <Check size={14} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="flex-1 text-sm font-medium text-text-primary">
+                      {type}
+                    </span>
+
+                    {/* Edit button */}
+                    <button
+                      onClick={() => {
+                        setEditingMealIndex(index);
+                        setEditingMealName(type);
+                      }}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-surface-3 hover:text-text-primary"
+                    >
+                      <Pencil size={13} />
+                    </button>
+
+                    {/* Delete button */}
+                    <button
+                      onClick={() => handleRemoveMealType(type)}
+                      className="flex h-7 w-7 items-center justify-center rounded-lg text-text-tertiary transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <X size={14} />
+                    </button>
+                  </>
+                )}
+              </motion.div>
             ))}
           </div>
+
+          {/* Add new meal type */}
           <div className="flex gap-2">
             <Input
               value={newMealType}
               onChange={(e) => setNewMealType(e.target.value)}
-              placeholder="New meal type"
+              placeholder="Add a meal type..."
               className="h-10 flex-1 bg-surface-2 border-none"
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleAddMealType();
