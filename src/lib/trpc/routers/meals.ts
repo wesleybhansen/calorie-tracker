@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq, and, desc } from "drizzle-orm";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";
 import {
   createTRPCRouter,
@@ -7,6 +7,7 @@ import {
 } from "../init";
 import {
   foodItems,
+  recipes,
   mealLogs,
   mealLogEntries,
 } from "@/db/schema";
@@ -16,32 +17,80 @@ export const mealsRouter = createTRPCRouter({
   getByDate: protectedProcedure
     .input(z.object({ date: z.string() }))
     .query(async ({ ctx, input }) => {
-      const logs = await ctx.db.query.mealLogs.findMany({
-        where: and(
-          eq(mealLogs.userId, ctx.user.id),
-          eq(mealLogs.date, input.date),
-        ),
-        with: {
-          entries: {
-            with: {
-              foodItem: true,
-              recipe: true,
-            },
-          },
-        },
-        orderBy: [desc(mealLogs.loggedAt)],
-      });
+      // Step 1: Get meal logs for this date
+      const logs = await ctx.db
+        .select()
+        .from(mealLogs)
+        .where(
+          and(
+            eq(mealLogs.userId, ctx.user.id),
+            eq(mealLogs.date, input.date),
+          ),
+        )
+        .orderBy(desc(mealLogs.loggedAt));
 
-      // Group by mealType
-      const grouped: Record<
-        string,
-        typeof logs
-      > = {};
+      if (!logs.length) return {};
+
+      // Step 2: Get all entries for these logs
+      const logIds = logs.map((l) => l.id);
+      const entries = await ctx.db
+        .select()
+        .from(mealLogEntries)
+        .where(inArray(mealLogEntries.mealLogId, logIds));
+
+      // Step 3: Get referenced food items and recipes
+      const foodItemIds = [...new Set(entries.map((e) => e.foodItemId).filter(Boolean))] as string[];
+      const recipeIds = [...new Set(entries.map((e) => e.recipeId).filter(Boolean))] as string[];
+
+      const [foods, recipeList] = await Promise.all([
+        foodItemIds.length
+          ? ctx.db.select().from(foodItems).where(inArray(foodItems.id, foodItemIds))
+          : Promise.resolve([]),
+        recipeIds.length
+          ? ctx.db.select().from(recipes).where(inArray(recipes.id, recipeIds))
+          : Promise.resolve([]),
+      ]);
+
+      const foodMap = new Map(foods.map((f) => [f.id, f]));
+      const recipeMap = new Map(recipeList.map((r) => [r.id, r]));
+
+      // Step 4: Group by meal type
+      const grouped: Record<string, Array<{
+        id: string;
+        mealType: string;
+        entries: Array<{
+          id: string;
+          mealLogId: string;
+          foodItemId: string | null;
+          recipeId: string | null;
+          servings: string | null;
+          calories: string;
+          proteinG: string | null;
+          carbsG: string | null;
+          fatG: string | null;
+          fiberG: string | null;
+          foodItem: typeof foods[number] | null;
+          recipe: typeof recipeList[number] | null;
+        }>;
+      }>> = {};
 
       for (const log of logs) {
         const key = log.mealType ?? "Other";
         if (!grouped[key]) grouped[key] = [];
-        grouped[key].push(log);
+
+        const logEntries = entries
+          .filter((e) => e.mealLogId === log.id)
+          .map((e) => ({
+            ...e,
+            foodItem: e.foodItemId ? foodMap.get(e.foodItemId) ?? null : null,
+            recipe: e.recipeId ? recipeMap.get(e.recipeId) ?? null : null,
+          }));
+
+        grouped[key].push({
+          id: log.id,
+          mealType: key,
+          entries: logEntries,
+        });
       }
 
       return grouped;
@@ -207,17 +256,17 @@ export const mealsRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Get the source meal log with entries
-      const sourceLogs = await ctx.db.query.mealLogs.findMany({
-        where: and(
-          eq(mealLogs.userId, ctx.user.id),
-          eq(mealLogs.date, input.fromDate),
-          eq(mealLogs.mealType, input.fromMealType),
-        ),
-        with: {
-          entries: true,
-        },
-      });
+      // Step 1: Get source meal logs (simple select, no lateral join)
+      const sourceLogs = await ctx.db
+        .select()
+        .from(mealLogs)
+        .where(
+          and(
+            eq(mealLogs.userId, ctx.user.id),
+            eq(mealLogs.date, input.fromDate),
+            eq(mealLogs.mealType, input.fromMealType),
+          ),
+        );
 
       if (!sourceLogs.length) {
         throw new TRPCError({
@@ -226,8 +275,13 @@ export const mealsRouter = createTRPCRouter({
         });
       }
 
-      // Collect all source entries
-      const sourceEntries = sourceLogs.flatMap((log) => log.entries);
+      // Step 2: Get entries for those logs
+      const sourceLogIds = sourceLogs.map((l) => l.id);
+      const sourceEntries = await ctx.db
+        .select()
+        .from(mealLogEntries)
+        .where(inArray(mealLogEntries.mealLogId, sourceLogIds));
+
       if (!sourceEntries.length) {
         throw new TRPCError({
           code: "NOT_FOUND",
@@ -235,7 +289,7 @@ export const mealsRouter = createTRPCRouter({
         });
       }
 
-      // Find or create target meal_log
+      // Step 3: Find or create target meal_log
       let [targetLog] = await ctx.db
         .select()
         .from(mealLogs)
@@ -259,7 +313,7 @@ export const mealsRouter = createTRPCRouter({
           .returning();
       }
 
-      // Copy entries
+      // Step 4: Copy entries
       const newEntries = await ctx.db
         .insert(mealLogEntries)
         .values(
