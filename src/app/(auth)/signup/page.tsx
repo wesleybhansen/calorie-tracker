@@ -75,6 +75,15 @@ export default function SignupPage() {
       return;
     }
 
+    // Check if we got a session back (email confirmation disabled)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      router.push("/");
+      router.refresh();
+      return;
+    }
+
+    // Otherwise, email confirmation is required
     setEmailSent(true);
   }
 
