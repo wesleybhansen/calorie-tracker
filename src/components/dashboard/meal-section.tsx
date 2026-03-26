@@ -2,6 +2,8 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence, useMotionValue, useTransform } from "motion/react";
+import { Drawer } from "vaul";
+import { format, subDays } from "date-fns";
 
 export interface FoodEntry {
   id: string;
@@ -19,6 +21,8 @@ interface MealSectionProps {
   totalCalories: number;
   onAddFood?: () => void;
   onDeleteEntry?: (id: string) => void;
+  onCopyFromDate?: (fromDate: string) => void;
+  isCopying?: boolean;
 }
 
 function MacroBar({ protein, carbs, fat }: { protein: number; carbs: number; fat: number }) {
@@ -114,78 +118,176 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
+function CopyIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CopyFromDateDrawer({
+  open,
+  onOpenChange,
+  onSelectDate,
+  isCopying,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSelectDate: (dateStr: string) => void;
+  isCopying?: boolean;
+}) {
+  const today = new Date();
+  const last7Days = Array.from({ length: 7 }, (_, i) => subDays(today, i + 1));
+
+  return (
+    <Drawer.Root open={open} onOpenChange={onOpenChange}>
+      <Drawer.Portal>
+        <Drawer.Overlay className="fixed inset-0 z-50 bg-black/40" />
+        <Drawer.Content className="fixed inset-x-0 bottom-0 z-50 rounded-t-2xl bg-surface-1 outline-none">
+          <div className="mx-auto mt-3 h-1 w-10 rounded-full bg-text-disabled/30" />
+          <div className="px-5 pb-8 pt-4" style={{ paddingBottom: "calc(2rem + env(safe-area-inset-bottom, 0px))" }}>
+            <Drawer.Title className="text-sm font-semibold text-text-primary mb-3">
+              Copy meal from...
+            </Drawer.Title>
+            <div className="flex flex-col gap-1">
+              {last7Days.map((day) => {
+                const dateStr = format(day, "yyyy-MM-dd");
+                return (
+                  <button
+                    key={dateStr}
+                    onClick={() => {
+                      onSelectDate(dateStr);
+                      onOpenChange(false);
+                    }}
+                    disabled={isCopying}
+                    className="flex items-center justify-between rounded-xl px-4 py-3 text-sm text-text-primary transition-colors hover:bg-white/5 disabled:opacity-50"
+                  >
+                    <span>{format(day, "EEEE, MMM d")}</span>
+                    <span className="text-xs text-text-tertiary">
+                      {format(day, "yyyy-MM-dd") === format(subDays(today, 1), "yyyy-MM-dd")
+                        ? "Yesterday"
+                        : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </Drawer.Content>
+      </Drawer.Portal>
+    </Drawer.Root>
+  );
+}
+
 export function MealSection({
   mealType,
   entries,
   totalCalories,
   onAddFood,
   onDeleteEntry,
+  onCopyFromDate,
+  isCopying,
 }: MealSectionProps) {
   const [expanded, setExpanded] = useState(true);
+  const [copyDrawerOpen, setCopyDrawerOpen] = useState(false);
 
   return (
-    <div
-      className="overflow-hidden rounded-2xl border"
-      style={{
-        backgroundColor: "var(--surface-1)",
-        borderColor: "rgba(255,255,255,0.06)",
-      }}
-    >
-      {/* Header */}
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="flex w-full items-center justify-between px-4 py-3.5"
+    <>
+      <div
+        className="overflow-hidden rounded-2xl border"
+        style={{
+          backgroundColor: "var(--surface-1)",
+          borderColor: "rgba(255,255,255,0.06)",
+        }}
       >
-        <span className="text-sm font-semibold text-text-primary">{mealType}</span>
-        <div className="flex items-center gap-2">
-          <span
-            className="text-sm text-text-secondary"
-            style={{ fontVariantNumeric: "tabular-nums" }}
-          >
-            {totalCalories} cal
-          </span>
-          <ChevronIcon expanded={expanded} />
-        </div>
-      </button>
-
-      {/* Entries */}
-      <AnimatePresence initial={false}>
-        {expanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 300, damping: 30 }}
-            className="overflow-hidden"
-          >
-            <div className="border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
-              {entries.length === 0 ? (
-                <div className="px-4 py-6 text-center">
-                  <p className="text-xs text-text-disabled">Tap + to add food</p>
-                </div>
-              ) : (
-                <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
-                  {entries.map((entry) => (
-                    <SwipeableEntry key={entry.id} entry={entry} onDelete={onDeleteEntry} />
-                  ))}
-                </div>
-              )}
-
-              {/* Add button */}
-              <button
-                onClick={onAddFood}
-                className="flex w-full items-center justify-center gap-1.5 border-t py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
-                style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        {/* Header */}
+        <button
+          onClick={() => setExpanded(!expanded)}
+          className="flex w-full items-center justify-between px-4 py-3.5"
+        >
+          <span className="text-sm font-semibold text-text-primary">{mealType}</span>
+          <div className="flex items-center gap-2">
+            {/* Copy button */}
+            {onCopyFromDate && (
+              <span
+                role="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setCopyDrawerOpen(true);
+                }}
+                className="flex items-center justify-center rounded-md p-1 text-text-tertiary transition-colors hover:text-primary hover:bg-primary/10"
               >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-                  <path d="M7 2v10M2 7h10" />
-                </svg>
-                Add Food
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+                <CopyIcon />
+              </span>
+            )}
+            <span
+              className="text-sm text-text-secondary"
+              style={{ fontVariantNumeric: "tabular-nums" }}
+            >
+              {totalCalories} cal
+            </span>
+            <ChevronIcon expanded={expanded} />
+          </div>
+        </button>
+
+        {/* Entries */}
+        <AnimatePresence initial={false}>
+          {expanded && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              className="overflow-hidden"
+            >
+              <div className="border-t" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+                {entries.length === 0 ? (
+                  <div className="px-4 py-6 text-center">
+                    <p className="text-xs text-text-disabled">Tap + to add food</p>
+                  </div>
+                ) : (
+                  <div className="divide-y" style={{ borderColor: "rgba(255,255,255,0.04)" }}>
+                    {entries.map((entry) => (
+                      <SwipeableEntry key={entry.id} entry={entry} onDelete={onDeleteEntry} />
+                    ))}
+                  </div>
+                )}
+
+                {/* Add button */}
+                <button
+                  onClick={onAddFood}
+                  className="flex w-full items-center justify-center gap-1.5 border-t py-2.5 text-xs font-medium text-primary transition-colors hover:bg-primary/5"
+                  style={{ borderColor: "rgba(255,255,255,0.06)" }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+                    <path d="M7 2v10M2 7h10" />
+                  </svg>
+                  Add Food
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {/* Copy from date drawer */}
+      <CopyFromDateDrawer
+        open={copyDrawerOpen}
+        onOpenChange={setCopyDrawerOpen}
+        onSelectDate={(fromDate) => onCopyFromDate?.(fromDate)}
+        isCopying={isCopying}
+      />
+    </>
   );
 }

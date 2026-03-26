@@ -191,8 +191,24 @@ export async function POST(request: Request) {
       return new Response("Invalid request: messages required", { status: 400 });
     }
 
-    // Get user context
-    const { profile, systemContext } = await getUserContext(user.id);
+    // Get user context (with fallback if DB query fails)
+    let profile: Awaited<ReturnType<typeof getUserContext>>["profile"];
+    let systemContext: string;
+    try {
+      const ctx = await getUserContext(user.id);
+      profile = ctx.profile;
+      systemContext = ctx.systemContext;
+    } catch (ctxError) {
+      console.error("Failed to load user context for chat:", ctxError);
+      // Fall back to minimal context so chat still works
+      const [fallbackProfile] = await db
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, user.id))
+        .limit(1);
+      profile = fallbackProfile;
+      systemContext = "User context unavailable. Answer questions to the best of your ability without daily tracking data.";
+    }
 
     if (!profile?.encryptedApiKey) {
       return new Response(

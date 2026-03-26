@@ -15,7 +15,9 @@ import {
   ChevronDown,
   ChevronUp,
   Loader2,
+  ChefHat,
 } from "lucide-react";
+import Link from "next/link";
 
 // ─── Types ────────────────────────────────────────────────────────
 type FoodItem = {
@@ -584,6 +586,32 @@ export default function SearchPage() {
           Find foods and manage your custom items.
         </p>
       </div>
+
+      {/* Recipes button */}
+      <Link href="/recipes">
+        <motion.div
+          whileTap={{ scale: 0.97 }}
+          transition={{ type: "spring", stiffness: 400, damping: 25 }}
+          className="flex items-center gap-3 rounded-2xl border bg-surface-1 px-4 py-3.5 transition-colors active:bg-surface-2"
+          style={{ borderColor: "rgba(255,255,255,0.06)" }}
+        >
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10">
+            <ChefHat size={18} className="text-primary" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-medium text-text-primary">
+              Recipe Builder
+            </p>
+            <p className="text-[11px] text-text-tertiary">
+              Create and manage your recipes
+            </p>
+          </div>
+          <ChevronDown
+            size={16}
+            className="-rotate-90 text-text-tertiary"
+          />
+        </motion.div>
+      </Link>
 
       {/* Search bar */}
       <div className="relative">

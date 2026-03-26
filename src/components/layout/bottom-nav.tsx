@@ -143,14 +143,14 @@ const navItems: NavItem[] = [
     icon: (active) => <ChatIcon active={active} />,
   },
   {
-    href: "/camera",
-    label: "Camera",
-    icon: (active) => <CameraIcon active={active} />,
-  },
-  {
     href: "/progress",
     label: "Progress",
     icon: (active) => <ChartIcon active={active} />,
+  },
+  {
+    href: "/profile",
+    label: "Profile",
+    icon: (active) => <UserIcon active={active} />,
   },
 ];
 

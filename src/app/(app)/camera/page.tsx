@@ -172,6 +172,16 @@ function BarcodeScanner() {
   const [servings, setServings] = useState(1);
   const utils = trpc.useUtils();
 
+  // Custom food form state (for barcode not found)
+  const [customName, setCustomName] = useState("");
+  const [customCalories, setCustomCalories] = useState("");
+  const [customProtein, setCustomProtein] = useState("");
+  const [customCarbs, setCustomCarbs] = useState("");
+  const [customFat, setCustomFat] = useState("");
+  const [customServingSize, setCustomServingSize] = useState("");
+  const [customServingUnit, setCustomServingUnit] = useState("g");
+  const [isSavingCustom, setIsSavingCustom] = useState(false);
+
   const {
     data: foodItem,
     isLoading: foodLoading,
@@ -181,12 +191,22 @@ function BarcodeScanner() {
     { enabled: !!scannedBarcode }
   );
 
+  const createFood = trpc.food.create.useMutation();
+
   const logEntry = trpc.meals.logEntry.useMutation({
     onSuccess: () => {
       toast.success("Added to your diary!");
       setDrawerOpen(false);
       setScannedBarcode(null);
       setServings(1);
+      // Reset custom form
+      setCustomName("");
+      setCustomCalories("");
+      setCustomProtein("");
+      setCustomCarbs("");
+      setCustomFat("");
+      setCustomServingSize("");
+      setCustomServingUnit("g");
       // Invalidate dashboard queries
       utils.daily.get.invalidate();
       utils.meals.getByDate.invalidate();
@@ -196,6 +216,50 @@ function BarcodeScanner() {
       toast.error(err.message);
     },
   });
+
+  const handleSaveCustomFood = async () => {
+    if (!customName.trim() || !customCalories) return;
+    setIsSavingCustom(true);
+
+    try {
+      const cal = Number(customCalories) || 0;
+      const pro = Number(customProtein) || 0;
+      const carb = Number(customCarbs) || 0;
+      const fat = Number(customFat) || 0;
+
+      // 1) Create the food item with barcode
+      const food = await createFood.mutateAsync({
+        name: customName.trim(),
+        barcode: scannedBarcode ?? undefined,
+        calories: cal,
+        proteinG: pro,
+        carbsG: carb,
+        fatG: fat,
+        servingSize: customServingSize || undefined,
+        servingUnit: customServingUnit || undefined,
+        source: "custom",
+        isShared: true,
+      });
+
+      // 2) Log the entry
+      await logEntry.mutateAsync({
+        date: format(new Date(), "yyyy-MM-dd"),
+        mealType,
+        foodItemId: food.id,
+        servings,
+        calories: Math.round(cal * servings),
+        proteinG: Math.round(pro * servings),
+        carbsG: Math.round(carb * servings),
+        fatG: Math.round(fat * servings),
+      });
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Failed to save food",
+      );
+    } finally {
+      setIsSavingCustom(false);
+    }
+  };
 
   const startScanner = useCallback(async () => {
     if (!scannerRef.current || html5QrRef.current) return;
@@ -490,20 +554,107 @@ function BarcodeScanner() {
                   animate={{ opacity: 1, y: 0 }}
                   className="mt-4 flex flex-col gap-4"
                 >
-                  <Drawer.Description className="text-sm text-text-secondary">
-                    Barcode <span className="font-mono">{scannedBarcode}</span>{" "}
-                    was not found in our database.
-                  </Drawer.Description>
+                  <p className="text-sm text-text-secondary">
+                    Barcode <span className="font-mono text-text-tertiary">{scannedBarcode}</span>{" "}
+                    was not found. Add it below:
+                  </p>
+
+                  {/* Name */}
+                  <div>
+                    <label className="mb-1 block text-xs text-text-secondary">Name</label>
+                    <Input
+                      value={customName}
+                      onChange={(e) => setCustomName(e.target.value)}
+                      placeholder="e.g. Chocolate Protein Bar"
+                      className="h-10 bg-surface-2 border-none"
+                    />
+                  </div>
+
+                  {/* Nutrition grid */}
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="mb-1 block text-xs text-text-secondary">Calories</label>
+                      <Input
+                        type="number"
+                        value={customCalories}
+                        onChange={(e) => setCustomCalories(e.target.value)}
+                        placeholder="0"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-text-secondary">Protein (g)</label>
+                      <Input
+                        type="number"
+                        value={customProtein}
+                        onChange={(e) => setCustomProtein(e.target.value)}
+                        placeholder="0"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-text-secondary">Carbs (g)</label>
+                      <Input
+                        type="number"
+                        value={customCarbs}
+                        onChange={(e) => setCustomCarbs(e.target.value)}
+                        placeholder="0"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1 block text-xs text-text-secondary">Fat (g)</label>
+                      <Input
+                        type="number"
+                        value={customFat}
+                        onChange={(e) => setCustomFat(e.target.value)}
+                        placeholder="0"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Serving size row */}
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <label className="mb-1 block text-xs text-text-secondary">Serving size</label>
+                      <Input
+                        value={customServingSize}
+                        onChange={(e) => setCustomServingSize(e.target.value)}
+                        placeholder="e.g. 40"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                    <div className="w-24">
+                      <label className="mb-1 block text-xs text-text-secondary">Unit</label>
+                      <Input
+                        value={customServingUnit}
+                        onChange={(e) => setCustomServingUnit(e.target.value)}
+                        placeholder="g"
+                        className="h-10 bg-surface-2 border-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Portion stepper */}
+                  <PortionStepper value={servings} onChange={setServings} />
+
+                  {/* Meal type selector */}
+                  <div className="flex flex-col gap-2">
+                    <span className="text-sm text-text-secondary">Add to meal</span>
+                    <MealTypeSelector value={mealType} onChange={setMealType} />
+                  </div>
+
+                  {/* Save & Add button */}
                   <Button
-                    variant="outline"
-                    onClick={() => {
-                      setDrawerOpen(false);
-                      // Could navigate to create custom food page
-                      toast.info("Custom food creation coming soon!");
-                    }}
+                    className="mt-2 w-full py-3"
+                    size="lg"
+                    onClick={handleSaveCustomFood}
+                    disabled={isSavingCustom || !customName.trim() || !customCalories}
                   >
-                    Create Custom Food
+                    {isSavingCustom ? "Saving..." : "Save & Add"}
                   </Button>
+
                   <Button
                     variant="ghost"
                     onClick={() => {

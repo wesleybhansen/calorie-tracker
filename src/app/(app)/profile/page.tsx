@@ -21,6 +21,9 @@ import {
   Plus,
   Save,
   ChevronDown,
+  Dumbbell,
+  Bell,
+  Clock,
 } from "lucide-react";
 
 // ─── Skeleton loader ──────────────────────────────────────────────
@@ -67,6 +70,25 @@ const AI_PROVIDERS = [
   { value: "google", label: "Google" },
 ];
 
+// ─── Day-of-week options ─────────────────────────────────────────
+const DAY_LABELS = [
+  { value: 0, label: "Sun" },
+  { value: 1, label: "Mon" },
+  { value: 2, label: "Tue" },
+  { value: 3, label: "Wed" },
+  { value: 4, label: "Thu" },
+  { value: 5, label: "Fri" },
+  { value: 6, label: "Sat" },
+];
+
+// ─── Meal reminder type ──────────────────────────────────────────
+interface MealReminder {
+  mealType: string;
+  hour: number;
+  minute: number;
+  enabled: boolean;
+}
+
 export default function ProfilePage() {
   const utils = trpc.useUtils();
   const { data: profile, isLoading } = trpc.user.getProfile.useQuery();
@@ -86,6 +108,14 @@ export default function ProfilePage() {
   const [fatTarget, setFatTarget] = useState(65);
   const [fiberTarget, setFiberTarget] = useState(25);
 
+  // ─── Training day state ─────────────────────────────────────────
+  const [trainingEnabled, setTrainingEnabled] = useState(false);
+  const [trainingDays, setTrainingDays] = useState<number[]>([1, 3, 5]);
+  const [trainingCalories, setTrainingCalories] = useState(2500);
+  const [trainingProtein, setTrainingProtein] = useState(180);
+  const [trainingCarbs, setTrainingCarbs] = useState(280);
+  const [trainingFat, setTrainingFat] = useState(70);
+
   // ─── Meal types state ───────────────────────────────────────────
   const [mealTypes, setMealTypes] = useState<string[]>([]);
   const [newMealType, setNewMealType] = useState("");
@@ -98,6 +128,9 @@ export default function ProfilePage() {
 
   // ─── Units state ────────────────────────────────────────────────
   const [units, setUnits] = useState<"imperial" | "metric">("imperial");
+
+  // ─── Meal reminders state ───────────────────────────────────────
+  const [reminders, setReminders] = useState<MealReminder[]>([]);
 
   // ─── Sync from server ───────────────────────────────────────────
   useEffect(() => {
@@ -114,6 +147,49 @@ export default function ProfilePage() {
     }
   }, [profile]);
 
+  // ─── Load training day settings from localStorage ───────────────
+  useEffect(() => {
+    try {
+      const enabled = localStorage.getItem("training_day_enabled") === "true";
+      setTrainingEnabled(enabled);
+
+      const days = localStorage.getItem("training_days");
+      if (days) setTrainingDays(JSON.parse(days));
+
+      const targets = localStorage.getItem("training_targets");
+      if (targets) {
+        const t = JSON.parse(targets);
+        setTrainingCalories(t.calories ?? 2500);
+        setTrainingProtein(t.protein ?? 180);
+        setTrainingCarbs(t.carbs ?? 280);
+        setTrainingFat(t.fat ?? 70);
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
+  // ─── Load meal reminders from localStorage ──────────────────────
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("meal_reminders");
+      if (raw) {
+        setReminders(JSON.parse(raw));
+      } else {
+        // Initialize defaults
+        const defaults: MealReminder[] = [
+          { mealType: "Breakfast", hour: 8, minute: 0, enabled: false },
+          { mealType: "Lunch", hour: 12, minute: 0, enabled: false },
+          { mealType: "Dinner", hour: 18, minute: 0, enabled: false },
+          { mealType: "Snack", hour: 15, minute: 0, enabled: false },
+        ];
+        setReminders(defaults);
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
   // ─── Handlers ───────────────────────────────────────────────────
   const handleSaveTargets = () => {
     updateProfile.mutate(
@@ -129,6 +205,27 @@ export default function ProfilePage() {
         onSuccess: () => toast.success("Targets saved"),
         onError: () => toast.error("Failed to save targets"),
       },
+    );
+  };
+
+  const handleSaveTrainingTargets = () => {
+    localStorage.setItem("training_day_enabled", trainingEnabled.toString());
+    localStorage.setItem("training_days", JSON.stringify(trainingDays));
+    localStorage.setItem(
+      "training_targets",
+      JSON.stringify({
+        calories: trainingCalories,
+        protein: trainingProtein,
+        carbs: trainingCarbs,
+        fat: trainingFat,
+      }),
+    );
+    toast.success("Training day settings saved");
+  };
+
+  const toggleTrainingDay = (day: number) => {
+    setTrainingDays((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
     );
   };
 
@@ -184,6 +281,13 @@ export default function ProfilePage() {
         onError: () => toast.error("Failed to update units"),
       },
     );
+  };
+
+  const handleUpdateReminder = (index: number, updates: Partial<MealReminder>) => {
+    const updated = [...reminders];
+    updated[index] = { ...updated[index], ...updates };
+    setReminders(updated);
+    localStorage.setItem("meal_reminders", JSON.stringify(updated));
   };
 
   const handleSignOut = async () => {
@@ -254,7 +358,7 @@ export default function ProfilePage() {
       </SectionCard>
 
       {/* ─── Daily Targets Section ───────────────────────────────── */}
-      <SectionCard icon={<Target size={16} />} title="Daily Targets">
+      <SectionCard icon={<Target size={16} />} title="Daily Targets (Rest Day)">
         <div className="flex flex-col gap-3">
           <div>
             <Label htmlFor="calorieTarget" className="mb-1.5 text-xs text-text-secondary">
@@ -327,6 +431,166 @@ export default function ProfilePage() {
             <Save size={14} />
             {updateProfile.isPending ? "Saving..." : "Save Targets"}
           </Button>
+        </div>
+      </SectionCard>
+
+      {/* ─── Training Day Section ──────────────────────────────────── */}
+      <SectionCard icon={<Dumbbell size={16} />} title="Training Day Targets">
+        <div className="flex flex-col gap-4">
+          {/* Enable toggle */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-text-primary">
+              Different targets on training days?
+            </span>
+            <button
+              onClick={() => setTrainingEnabled(!trainingEnabled)}
+              className={`relative h-6 w-11 rounded-full transition-colors ${
+                trainingEnabled ? "bg-primary" : "bg-surface-3"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+                  trainingEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
+              />
+            </button>
+          </div>
+
+          {trainingEnabled && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              exit={{ opacity: 0, height: 0 }}
+              className="flex flex-col gap-3 overflow-hidden"
+            >
+              {/* Training days picker */}
+              <div>
+                <Label className="mb-2 block text-xs text-text-secondary">
+                  Training Days
+                </Label>
+                <div className="flex gap-1.5">
+                  {DAY_LABELS.map((d) => (
+                    <button
+                      key={d.value}
+                      onClick={() => toggleTrainingDay(d.value)}
+                      className={`flex-1 rounded-lg py-2 text-xs font-medium transition-colors ${
+                        trainingDays.includes(d.value)
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-surface-2 text-text-secondary hover:text-text-primary"
+                      }`}
+                    >
+                      {d.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Training day targets */}
+              <div>
+                <Label className="mb-1.5 text-xs text-text-secondary">
+                  Training Day Calories
+                </Label>
+                <Input
+                  type="number"
+                  value={trainingCalories}
+                  onChange={(e) => setTrainingCalories(Number(e.target.value))}
+                  className="h-10 bg-surface-2 border-none"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <Label className="mb-1.5 text-xs text-text-secondary">
+                    Protein (g)
+                  </Label>
+                  <Input
+                    type="number"
+                    value={trainingProtein}
+                    onChange={(e) => setTrainingProtein(Number(e.target.value))}
+                    className="h-10 bg-surface-2 border-none"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 text-xs text-text-secondary">
+                    Carbs (g)
+                  </Label>
+                  <Input
+                    type="number"
+                    value={trainingCarbs}
+                    onChange={(e) => setTrainingCarbs(Number(e.target.value))}
+                    className="h-10 bg-surface-2 border-none"
+                  />
+                </div>
+                <div>
+                  <Label className="mb-1.5 text-xs text-text-secondary">
+                    Fat (g)
+                  </Label>
+                  <Input
+                    type="number"
+                    value={trainingFat}
+                    onChange={(e) => setTrainingFat(Number(e.target.value))}
+                    className="h-10 bg-surface-2 border-none"
+                  />
+                </div>
+              </div>
+
+              <Button
+                size="lg"
+                onClick={handleSaveTrainingTargets}
+                className="mt-1 w-full"
+              >
+                <Save size={14} />
+                Save Training Settings
+              </Button>
+            </motion.div>
+          )}
+
+          {!trainingEnabled && (
+            <p className="text-xs text-text-disabled">
+              Enable to set higher targets on training days.
+            </p>
+          )}
+        </div>
+      </SectionCard>
+
+      {/* ─── Meal Reminders Section ────────────────────────────────── */}
+      <SectionCard icon={<Bell size={16} />} title="Meal Reminders">
+        <div className="flex flex-col gap-3">
+          <p className="text-xs text-text-tertiary">
+            Get a reminder when it is time to log each meal. Times are in 24h format.
+          </p>
+          {reminders.map((r, i) => (
+            <div
+              key={r.mealType}
+              className="flex items-center gap-3 rounded-lg bg-surface-2 px-3 py-2.5"
+            >
+              <button
+                onClick={() => handleUpdateReminder(i, { enabled: !r.enabled })}
+                className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${
+                  r.enabled ? "bg-primary" : "bg-surface-3"
+                }`}
+              >
+                <span
+                  className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                    r.enabled ? "translate-x-4" : "translate-x-0"
+                  }`}
+                />
+              </button>
+              <span className="flex-1 text-sm text-text-primary">{r.mealType}</span>
+              <div className="flex items-center gap-1">
+                <Clock size={12} className="text-text-tertiary" />
+                <input
+                  type="time"
+                  value={`${String(r.hour).padStart(2, "0")}:${String(r.minute).padStart(2, "0")}`}
+                  onChange={(e) => {
+                    const [h, m] = e.target.value.split(":").map(Number);
+                    handleUpdateReminder(i, { hour: h, minute: m });
+                  }}
+                  className="bg-transparent text-sm text-text-primary outline-none"
+                  style={{ colorScheme: "dark" }}
+                />
+              </div>
+            </div>
+          ))}
         </div>
       </SectionCard>
 

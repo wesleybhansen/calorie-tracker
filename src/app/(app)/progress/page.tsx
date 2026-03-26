@@ -29,6 +29,7 @@ import {
   Target,
   Plus,
   Loader2,
+  Activity,
 } from "lucide-react";
 
 // ─── Helpers ──────────────────────────────────────────────────────
@@ -354,6 +355,50 @@ export default function ProgressPage() {
 
   const calorieTarget = rangeData?.targets.calories ?? 2000;
 
+  // ─── Adaptive TDEE calculation ─────────────────────────────────
+  const tdeeEstimate = useMemo(() => {
+    if (!rangeData || weightData.length < 4) return null;
+
+    // Need at least 2 weeks of calorie data + 2 weight points
+    const daysWithCalories = rangeData.days.filter((d) => d.calories > 0);
+    if (daysWithCalories.length < 14) return null;
+
+    // Average daily calories over the period
+    const avgCalories =
+      daysWithCalories.reduce((sum, d) => sum + d.calories, 0) /
+      daysWithCalories.length;
+
+    // Weight trend: use first and last trend values to get weekly change
+    const firstWeight = weightData[0];
+    const lastWeight = weightData[weightData.length - 1];
+    const daysBetween =
+      (new Date(lastWeight.date).getTime() - new Date(firstWeight.date).getTime()) /
+      (1000 * 60 * 60 * 24);
+
+    if (daysBetween < 14) return null;
+
+    const weeksBetween = daysBetween / 7;
+    // Weight change per week (in lbs if imperial, kg if metric)
+    const weightChangePerWeek =
+      (lastWeight.trend - firstWeight.trend) / weeksBetween;
+
+    // Convert to kg for calorie calculation if needed
+    const changeKgPerWeek =
+      units === "imperial"
+        ? weightChangePerWeek * 0.453592
+        : weightChangePerWeek;
+
+    // 1 kg of body weight ~ 7700 kcal
+    const tdee = Math.round(avgCalories - (changeKgPerWeek * 7700) / 7);
+
+    return {
+      tdee,
+      weeksOfData: Math.round(weeksBetween),
+      avgCalories: Math.round(avgCalories),
+      weightChangePerWeek: Math.round(weightChangePerWeek * 10) / 10,
+    };
+  }, [rangeData, weightData, units]);
+
   // ─── Weight chart data for recharts ───────────────────────────
   const weightChartData = useMemo(() => {
     if (!rangeData || weightData.length === 0) return [];
@@ -600,6 +645,42 @@ export default function ProgressPage() {
           <p className="mt-2 text-xs text-text-disabled">
             Log a meal today to start your streak!
           </p>
+        )}
+      </SectionCard>
+
+      {/* ─── Estimated TDEE Section ──────────────────────────────── */}
+      <SectionCard icon={<Activity size={16} />} title="Estimated TDEE">
+        {tdeeEstimate ? (
+          <div className="flex flex-col gap-3">
+            <div className="flex items-baseline gap-3">
+              <span
+                className="text-4xl font-extralight text-text-primary"
+                style={{ fontVariantNumeric: "tabular-nums" }}
+              >
+                {tdeeEstimate.tdee}
+              </span>
+              <span className="text-sm text-text-tertiary">cal / day</span>
+            </div>
+            <p className="text-xs text-text-tertiary">
+              Based on your last {tdeeEstimate.weeksOfData} weeks of data.
+              Avg intake: {tdeeEstimate.avgCalories} cal/day, weight trend:{" "}
+              {tdeeEstimate.weightChangePerWeek > 0 ? "+" : ""}
+              {tdeeEstimate.weightChangePerWeek}{" "}
+              {units === "imperial" ? "lbs" : "kg"}/week.
+            </p>
+            <p className="text-[10px] text-text-disabled">
+              TDEE = avg calories adjusted for weight change. More data improves accuracy.
+            </p>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            <p className="text-sm text-text-tertiary">
+              Log for 2+ weeks to see your estimated TDEE
+            </p>
+            <p className="text-xs text-text-disabled">
+              We need at least 14 days of calorie data and 2 weight entries to calculate your Total Daily Energy Expenditure.
+            </p>
+          </div>
         )}
       </SectionCard>
 
