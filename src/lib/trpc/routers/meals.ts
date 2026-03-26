@@ -55,24 +55,8 @@ export const mealsRouter = createTRPCRouter({
       const recipeMap = new Map(recipeList.map((r) => [r.id, r]));
 
       // Step 4: Group by meal type
-      const grouped: Record<string, Array<{
-        id: string;
-        mealType: string;
-        entries: Array<{
-          id: string;
-          mealLogId: string;
-          foodItemId: string | null;
-          recipeId: string | null;
-          servings: string | null;
-          calories: string;
-          proteinG: string | null;
-          carbsG: string | null;
-          fatG: string | null;
-          fiberG: string | null;
-          foodItem: typeof foods[number] | null;
-          recipe: typeof recipeList[number] | null;
-        }>;
-      }>> = {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const grouped: Record<string, any[]> = {};
 
       for (const log of logs) {
         const key = log.mealType ?? "Other";
