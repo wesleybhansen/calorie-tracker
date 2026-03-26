@@ -44,8 +44,16 @@ export default function SignupPage() {
     },
   });
 
+  // Allowlisted emails — only these can sign up
+  const ALLOWED_EMAILS = ["wesley.b.hansen@gmail.com"];
+
   async function onSubmit(data: SignupValues) {
     setError(null);
+
+    if (!ALLOWED_EMAILS.includes(data.email.toLowerCase())) {
+      setError("Signups are currently invite-only. Contact the admin for access.");
+      return;
+    }
 
     const supabase = createClient();
     const { error: authError } = await supabase.auth.signUp({
@@ -67,8 +75,6 @@ export default function SignupPage() {
       return;
     }
 
-    // If email confirmation is enabled, show the check-email message.
-    // Otherwise, redirect to home.
     setEmailSent(true);
   }
 
