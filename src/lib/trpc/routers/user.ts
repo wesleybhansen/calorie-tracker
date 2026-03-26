@@ -36,12 +36,23 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
+      // Only include fields that were actually provided (not undefined)
+      const setData: Record<string, unknown> = { updatedAt: new Date() };
+      if (input.displayName !== undefined) setData.displayName = input.displayName;
+      if (input.avatarUrl !== undefined) setData.avatarUrl = input.avatarUrl;
+      if (input.dailyCalorieTarget !== undefined) setData.dailyCalorieTarget = input.dailyCalorieTarget;
+      if (input.proteinTargetG !== undefined) setData.proteinTargetG = input.proteinTargetG;
+      if (input.carbsTargetG !== undefined) setData.carbsTargetG = input.carbsTargetG;
+      if (input.fatTargetG !== undefined) setData.fatTargetG = input.fatTargetG;
+      if (input.fiberTargetG !== undefined) setData.fiberTargetG = input.fiberTargetG;
+      if (input.mealTypes !== undefined) setData.mealTypes = input.mealTypes;
+      if (input.aiProvider !== undefined) setData.aiProvider = input.aiProvider;
+      if (input.encryptedApiKey !== undefined) setData.encryptedApiKey = input.encryptedApiKey;
+      if (input.units !== undefined) setData.units = input.units;
+
       const [updated] = await ctx.db
         .update(profiles)
-        .set({
-          ...input,
-          updatedAt: new Date(),
-        })
+        .set(setData)
         .where(eq(profiles.id, ctx.user.id))
         .returning();
 
