@@ -66,6 +66,30 @@ function CameraIcon({ active }: { active: boolean }) {
   );
 }
 
+function ChatIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width="24"
+      height="24"
+      viewBox="0 0 24 24"
+      fill={active ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={active ? 0 : 1.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="m8 18-4 4V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2Z" />
+      {!active && (
+        <>
+          <path d="M9 11h.01" />
+          <path d="M12 11h.01" />
+          <path d="M15 11h.01" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 function ChartIcon({ active }: { active: boolean }) {
   return (
     <svg
@@ -114,6 +138,11 @@ const navItems: NavItem[] = [
     icon: (active) => <SearchIcon active={active} />,
   },
   {
+    href: "/chat",
+    label: "AI Chat",
+    icon: (active) => <ChatIcon active={active} />,
+  },
+  {
     href: "/camera",
     label: "Camera",
     icon: (active) => <CameraIcon active={active} />,
@@ -122,11 +151,6 @@ const navItems: NavItem[] = [
     href: "/progress",
     label: "Progress",
     icon: (active) => <ChartIcon active={active} />,
-  },
-  {
-    href: "/profile",
-    label: "Profile",
-    icon: (active) => <UserIcon active={active} />,
   },
 ];
 

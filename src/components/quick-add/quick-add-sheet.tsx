@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from "motion/react";
 import { toast } from "sonner";
 import { trpc } from "@/lib/trpc/client";
 import { FoodResultCard, type FoodResult } from "./food-result-card";
+import { VoiceInput } from "./voice-input";
 import { format } from "date-fns";
 
 interface QuickAddSheetProps {
@@ -35,6 +36,7 @@ export function QuickAddSheet({
   const [quickCalMode, setQuickCalMode] = useState(false);
   const [quickCalAmount, setQuickCalAmount] = useState("");
   const [quickCalDescription, setQuickCalDescription] = useState("");
+  const [voiceMode, setVoiceMode] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const dateStr = format(selectedDate, "yyyy-MM-dd");
@@ -57,6 +59,7 @@ export function QuickAddSheet({
       setQuickCalMode(false);
       setQuickCalAmount("");
       setQuickCalDescription("");
+      setVoiceMode(false);
       // Auto-focus the input after drawer animation
       setTimeout(() => inputRef.current?.focus(), 400);
     }
@@ -332,6 +335,28 @@ export function QuickAddSheet({
                   </svg>
                 </button>
               )}
+              {/* Mic button */}
+              <motion.button
+                whileTap={{ scale: 0.9 }}
+                onClick={() => setVoiceMode(true)}
+                className="flex-shrink-0 rounded-lg p-1 text-text-tertiary transition-colors hover:text-primary"
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" y1="19" x2="12" y2="23" />
+                  <line x1="8" y1="23" x2="16" y2="23" />
+                </svg>
+              </motion.button>
             </div>
 
             {/* Action row */}
@@ -380,6 +405,16 @@ export function QuickAddSheet({
 
           {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto px-5 pb-safe">
+            {/* Voice Input Mode */}
+            {voiceMode ? (
+              <VoiceInput
+                mealType={mealType}
+                dateStr={dateStr}
+                onAddFood={handleAddFood}
+                onClose={() => setVoiceMode(false)}
+              />
+            ) : (
+            <>
             {/* Quick Cal Mode */}
             <AnimatePresence>
               {quickCalMode && (
@@ -560,6 +595,8 @@ export function QuickAddSheet({
                   </div>
                 )}
               </div>
+            )}
+            </>
             )}
           </div>
         </Drawer.Content>

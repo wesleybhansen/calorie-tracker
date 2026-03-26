@@ -9,7 +9,9 @@ import { DateSelector } from "@/components/dashboard/date-selector";
 import { MealSection, type FoodEntry } from "@/components/dashboard/meal-section";
 import { MacroSummary } from "@/components/dashboard/macro-summary";
 import { QuickAddSheet } from "@/components/quick-add/quick-add-sheet";
+import { AISuggestions } from "@/components/dashboard/ai-suggestions";
 import { motion } from "motion/react";
+import Link from "next/link";
 
 // ─── Skeleton shimmer ────────────────────────────────────────────
 
@@ -71,6 +73,8 @@ export default function DashboardPage() {
   // ─── Queries ─────────────────────────────────────────────────
   const dailyQuery = trpc.daily.get.useQuery({ date: dateStr });
   const mealsQuery = trpc.meals.getByDate.useQuery({ date: dateStr });
+  const profileQuery = trpc.user.getProfile.useQuery();
+  const hasAiKey = !!profileQuery.data?.encryptedApiKey;
 
   // ─── Mutations ───────────────────────────────────────────────
   const deleteEntry = trpc.meals.deleteEntry.useMutation({
@@ -199,6 +203,18 @@ export default function DashboardPage() {
         />
       )}
 
+      {/* AI Suggestions */}
+      {hasAiKey && (
+        <AISuggestions
+          selectedDate={selectedDate}
+          dateStr={dateStr}
+          onQuickAdd={(mt) => {
+            setQuickAddMealType(mt);
+            setQuickAddOpen(true);
+          }}
+        />
+      )}
+
       {/* Meal sections */}
       <div className="flex flex-col gap-3">
         {isLoading
@@ -225,7 +241,24 @@ export default function DashboardPage() {
             })}
       </div>
 
-      {/* FAB */}
+      {/* Chat FAB */}
+      <Link href="/chat">
+        <motion.div
+          className="fixed bottom-40 right-5 z-40 flex h-12 w-12 items-center justify-center rounded-full shadow-lg"
+          style={{ backgroundColor: "var(--surface-2)" }}
+          whileTap={{ scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 300, damping: 30 }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="m8 18-4 4V8a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2Z" />
+            <path d="M9 11h.01" />
+            <path d="M12 11h.01" />
+            <path d="M15 11h.01" />
+          </svg>
+        </motion.div>
+      </Link>
+
+      {/* Quick Add FAB */}
       <motion.button
         onClick={() => {
           setQuickAddMealType(getMealTypeFromHour());
