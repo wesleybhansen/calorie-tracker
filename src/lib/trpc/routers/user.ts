@@ -42,7 +42,7 @@ export const userRouter = createTRPCRouter({
       if (input.carbsTargetG !== undefined) data.carbsTargetG = input.carbsTargetG;
       if (input.fatTargetG !== undefined) data.fatTargetG = input.fatTargetG;
       if (input.fiberTargetG !== undefined) data.fiberTargetG = input.fiberTargetG;
-      if (input.mealTypes !== undefined) data.mealTypes = input.mealTypes;
+      if (input.mealTypes !== undefined) data.mealTypes = JSON.stringify(input.mealTypes);
       if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
       if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
       if (input.units !== undefined) data.units = input.units;
