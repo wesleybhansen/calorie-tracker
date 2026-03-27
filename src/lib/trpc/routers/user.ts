@@ -1,20 +1,19 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
 } from "../init";
-import { profiles } from "@/db/schema";
 
 export const userRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
-    const [profile] = await ctx.db
-      .select()
-      .from(profiles)
-      .where(eq(profiles.id, ctx.user.id))
-      .limit(1);
+    const { data, error } = await ctx.supabase
+      .from("profiles")
+      .select("*")
+      .eq("id", ctx.user.id)
+      .single();
 
-    return profile ?? null;
+    if (error) throw new Error(error.message);
+    return data;
   }),
 
   updateProfile: protectedProcedure
@@ -48,30 +47,15 @@ export const userRouter = createTRPCRouter({
       if (input.encryptedApiKey !== undefined) updateData.encrypted_api_key = input.encryptedApiKey;
       if (input.units !== undefined) updateData.units = input.units;
 
-      // Debug: check auth state of the supabase client
-      const { data: { user: sbUser } } = await ctx.supabase.auth.getUser();
-      console.log("Supabase auth user:", sbUser?.id, "ctx.user:", ctx.user.id);
-
       const { data: updatedRows, error } = await ctx.supabase
         .from("profiles")
         .update(updateData)
         .eq("id", ctx.user.id)
-        .select();
-
-      console.log("Update result:", { updatedRows, error, updateData });
-
-      if (error) throw new Error(`Supabase error: ${error.message} (code: ${error.code})`);
-      if (!updatedRows || updatedRows.length === 0) {
-        throw new Error(`0 rows updated. sbUser=${sbUser?.id} ctxUser=${ctx.user.id} keys=${Object.keys(updateData).join(",")}`);
-      }
-
-      // Return updated profile via Drizzle (reads work fine)
-      const [profile] = await ctx.db
         .select()
-        .from(profiles)
-        .where(eq(profiles.id, ctx.user.id))
-        .limit(1);
+        .single();
 
-      return profile;
+      if (error) throw new Error(`Update failed: ${error.message}`);
+
+      return updatedRows;
     }),
 });
