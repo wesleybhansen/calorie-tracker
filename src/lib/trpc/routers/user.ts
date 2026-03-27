@@ -37,15 +37,11 @@ export const userRouter = createTRPCRouter({
       // Separate mealTypes update from everything else
       // to handle jsonb properly
       if (input.mealTypes !== undefined) {
-        // Must use sql`` to cast the JSON string to jsonb explicitly
-        // because postgres.js with prepare:false sends arrays as pg arrays, not jsonb
-        await ctx.db
-          .update(profiles)
-          .set({
-            mealTypes: sql`${JSON.stringify(input.mealTypes)}::jsonb`,
-            updatedAt: new Date(),
-          } as any)
-          .where(eq(profiles.id, ctx.user.id));
+        // postgres.js sends JS arrays as pg arrays, not jsonb.
+        // Use db.execute with sql template to get proper parameterized jsonb cast.
+        await ctx.db.execute(
+          sql`UPDATE profiles SET meal_types = ${JSON.stringify(input.mealTypes)}::jsonb, updated_at = now() WHERE id = ${ctx.user.id}`
+        );
       }
 
       // Handle non-mealTypes fields
