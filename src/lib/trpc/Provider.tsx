@@ -16,7 +16,7 @@ export function TRPCProvider({ children }: { children: React.ReactNode }) {
             staleTime: 5 * 60 * 1000, // 5 minutes — avoid refetching on every navigation
             gcTime: 10 * 60 * 1000, // 10 minutes — keep cache in memory longer
             refetchOnWindowFocus: false,
-            refetchOnMount: false, // Don't refetch when component remounts
+            refetchOnMount: true, // Refetch stale/invalidated data on mount (default behavior)
             retry: 1,
           },
         },

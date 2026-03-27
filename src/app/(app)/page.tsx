@@ -135,9 +135,7 @@ export default function DashboardPage() {
   const utils = trpc.useUtils();
 
   // ─── Onboarding check ──────────────────────────────────────────
-  const onboardProfileQuery = trpc.user.getProfile.useQuery(undefined, {
-    staleTime: Infinity,
-  });
+  const onboardProfileQuery = trpc.user.getProfile.useQuery();
   const todayStr = format(new Date(), "yyyy-MM-dd");
   const onboardMealsQuery = trpc.meals.getByDate.useQuery(
     { date: todayStr },

@@ -244,7 +244,8 @@ export function QuickAddSheet({
   const showUSDAButton =
     isSearching && localResults.length < 5 && !usdaQuery;
 
-  const mealTypes = ["Breakfast", "Lunch", "Dinner", "Snack"];
+  const profileQuery = trpc.user.getProfile.useQuery();
+  const mealTypes = profileQuery.data?.mealTypes ?? ["Breakfast", "Lunch", "Dinner", "Snack"];
 
   return (
     <Drawer.Root open={open} onOpenChange={onOpenChange}>
