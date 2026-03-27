@@ -48,12 +48,16 @@ export const userRouter = createTRPCRouter({
       if (input.encryptedApiKey !== undefined) updateData.encrypted_api_key = input.encryptedApiKey;
       if (input.units !== undefined) updateData.units = input.units;
 
-      const { error } = await ctx.supabase
+      const { data: updatedRows, error } = await ctx.supabase
         .from("profiles")
         .update(updateData)
-        .eq("id", ctx.user.id);
+        .eq("id", ctx.user.id)
+        .select();
 
-      if (error) throw new Error(error.message);
+      if (error) throw new Error(`Supabase error: ${error.message} (code: ${error.code})`);
+      if (!updatedRows || updatedRows.length === 0) {
+        throw new Error("Update matched 0 rows — RLS may be blocking. User ID: " + ctx.user.id);
+      }
 
       // Return updated profile via Drizzle (reads work fine)
       const [profile] = await ctx.db
