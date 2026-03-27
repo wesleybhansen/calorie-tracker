@@ -5,10 +5,8 @@ import {
   protectedProcedure,
 } from "../init";
 import { profiles } from "@/db/schema";
-import { pgClient } from "@/db";
 
 export const userRouter = createTRPCRouter({
-  // ─── get profile ───────────────────────────────────────────────
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     const [profile] = await ctx.db
       .select()
@@ -19,7 +17,6 @@ export const userRouter = createTRPCRouter({
     return profile ?? null;
   }),
 
-  // ─── update profile ────────────────────────────────────────────
   updateProfile: protectedProcedure
     .input(
       z.object({
@@ -37,27 +34,24 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      try {
-        // Handle mealTypes with raw postgres client (bypasses Drizzle jsonb issues)
-        if (input.mealTypes !== undefined) {
-          await pgClient`
-            UPDATE profiles
-            SET meal_types = ${JSON.stringify(input.mealTypes)}::jsonb,
-                updated_at = now()
-            WHERE id = ${ctx.user.id}
-          `;
+      // Separate mealTypes update from everything else
+      // to handle jsonb properly
+      if (input.mealTypes !== undefined) {
+        await ctx.db
+          .update(profiles)
+          .set({
+            mealTypes: input.mealTypes,
+            updatedAt: new Date(),
+          })
+          .where(eq(profiles.id, ctx.user.id));
+      }
 
-          // If only mealTypes was provided, return early
-          const otherKeys = Object.keys(input).filter(k => k !== 'mealTypes');
-          if (otherKeys.length === 0) {
-            const [profile] = await ctx.db.select().from(profiles).where(eq(profiles.id, ctx.user.id)).limit(1);
-            return profile;
-          }
-        }
+      // Handle non-mealTypes fields
+      const hasOtherFields = Object.keys(input).some(k => k !== 'mealTypes' && input[k as keyof typeof input] !== undefined);
 
-        // Handle all other fields via Drizzle
+      if (hasOtherFields) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: any = { updatedAt: new Date() };
+        const data: Record<string, any> = { updatedAt: new Date() };
         if (input.displayName !== undefined) data.displayName = input.displayName;
         if (input.dailyCalorieTarget !== undefined) data.dailyCalorieTarget = input.dailyCalorieTarget;
         if (input.proteinTargetG !== undefined) data.proteinTargetG = input.proteinTargetG;
@@ -68,16 +62,19 @@ export const userRouter = createTRPCRouter({
         if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
         if (input.units !== undefined) data.units = input.units;
 
-        const [updated] = await ctx.db
+        await ctx.db
           .update(profiles)
           .set(data)
-          .where(eq(profiles.id, ctx.user.id))
-          .returning();
-
-        return updated;
-      } catch (error) {
-        console.error("updateProfile error:", error);
-        throw error;
+          .where(eq(profiles.id, ctx.user.id));
       }
+
+      // Return updated profile
+      const [profile] = await ctx.db
+        .select()
+        .from(profiles)
+        .where(eq(profiles.id, ctx.user.id))
+        .limit(1);
+
+      return profile;
     }),
 });
