@@ -9,8 +9,24 @@ import {
   timestamp,
   jsonb,
   unique,
+  customType,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
+
+// Custom type that forces jsonb values through JSON.stringify as a text param
+// This fixes postgres.js sending JS arrays as pg arrays instead of jsonb
+const jsonbAsText = customType<{ data: string[]; driverData: string }>({
+  dataType() {
+    return "jsonb";
+  },
+  toDriver(value: string[]): string {
+    return JSON.stringify(value);
+  },
+  fromDriver(value: unknown): string[] {
+    if (typeof value === "string") return JSON.parse(value);
+    return value as string[];
+  },
+});
 
 // ─── profiles ───────────────────────────────────────────────────────
 export const profiles = pgTable("profiles", {
@@ -22,8 +38,7 @@ export const profiles = pgTable("profiles", {
   carbsTargetG: integer("carbs_target_g").default(200),
   fatTargetG: integer("fat_target_g").default(65),
   fiberTargetG: integer("fiber_target_g").default(25),
-  mealTypes: jsonb("meal_types")
-    .$type<string[]>()
+  mealTypes: jsonbAsText("meal_types")
     .default(["Breakfast", "Lunch", "Dinner", "Snack"]),
   aiProvider: text("ai_provider").default("openai"),
   encryptedApiKey: text("encrypted_api_key"),

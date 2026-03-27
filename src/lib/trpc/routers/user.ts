@@ -5,7 +5,6 @@ import {
   protectedProcedure,
 } from "../init";
 import { profiles } from "@/db/schema";
-import { pgSql } from "@/db";
 
 export const userRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -35,46 +34,25 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Separate mealTypes update from everything else
-      // to handle jsonb properly
-      if (input.mealTypes !== undefined) {
-        // Use postgres.js directly — Drizzle cannot handle jsonb params through pgbouncer
-        await pgSql`
-          UPDATE profiles
-          SET meal_types = ${pgSql.json(input.mealTypes)}, updated_at = now()
-          WHERE id = ${ctx.user.id}
-        `;
-      }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const data: Record<string, any> = { updatedAt: new Date() };
+      if (input.displayName !== undefined) data.displayName = input.displayName;
+      if (input.dailyCalorieTarget !== undefined) data.dailyCalorieTarget = input.dailyCalorieTarget;
+      if (input.proteinTargetG !== undefined) data.proteinTargetG = input.proteinTargetG;
+      if (input.carbsTargetG !== undefined) data.carbsTargetG = input.carbsTargetG;
+      if (input.fatTargetG !== undefined) data.fatTargetG = input.fatTargetG;
+      if (input.fiberTargetG !== undefined) data.fiberTargetG = input.fiberTargetG;
+      if (input.mealTypes !== undefined) data.mealTypes = input.mealTypes;
+      if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
+      if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
+      if (input.units !== undefined) data.units = input.units;
 
-      // Handle non-mealTypes fields
-      const hasOtherFields = Object.keys(input).some(k => k !== 'mealTypes' && input[k as keyof typeof input] !== undefined);
-
-      if (hasOtherFields) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const data: Record<string, any> = { updatedAt: new Date() };
-        if (input.displayName !== undefined) data.displayName = input.displayName;
-        if (input.dailyCalorieTarget !== undefined) data.dailyCalorieTarget = input.dailyCalorieTarget;
-        if (input.proteinTargetG !== undefined) data.proteinTargetG = input.proteinTargetG;
-        if (input.carbsTargetG !== undefined) data.carbsTargetG = input.carbsTargetG;
-        if (input.fatTargetG !== undefined) data.fatTargetG = input.fatTargetG;
-        if (input.fiberTargetG !== undefined) data.fiberTargetG = input.fiberTargetG;
-        if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
-        if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
-        if (input.units !== undefined) data.units = input.units;
-
-        await ctx.db
-          .update(profiles)
-          .set(data)
-          .where(eq(profiles.id, ctx.user.id));
-      }
-
-      // Return updated profile
-      const [profile] = await ctx.db
-        .select()
-        .from(profiles)
+      const [updated] = await ctx.db
+        .update(profiles)
+        .set(data)
         .where(eq(profiles.id, ctx.user.id))
-        .limit(1);
+        .returning();
 
-      return profile;
+      return updated;
     }),
 });
