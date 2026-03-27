@@ -2,7 +2,8 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as schema from "./schema";
 
-const connectionString = process.env.DATABASE_URL!;
+// Prefer direct connection over pooler — Supavisor pooler has issues with jsonb params
+const connectionString = process.env.DIRECT_URL ?? process.env.DATABASE_URL!;
 
 // Reuse connection across hot serverless invocations
 const globalForDb = globalThis as unknown as { pgClient: ReturnType<typeof postgres> | undefined };
