@@ -34,19 +34,12 @@ export const dailyRouter = createTRPCRouter({
               eq(mealLogs.date, input.date),
             ),
           ),
-        ctx.db
-          .select({
-            dailyCalorieTarget: profiles.dailyCalorieTarget,
-            proteinTargetG: profiles.proteinTargetG,
-            carbsTargetG: profiles.carbsTargetG,
-            fatTargetG: profiles.fatTargetG,
-            fiberTargetG: profiles.fiberTargetG,
-            mealTypes: profiles.mealTypes,
-            encryptedApiKey: profiles.encryptedApiKey,
-          })
-          .from(profiles)
-          .where(eq(profiles.id, ctx.user.id))
-          .limit(1),
+        ctx.supabase
+          .from("profiles")
+          .select("daily_calorie_target, protein_target_g, carbs_target_g, fat_target_g, fiber_target_g, meal_types, encrypted_api_key")
+          .eq("id", ctx.user.id)
+          .single()
+          .then(({ data }) => [data]),
         ctx.db
           .select({ weightKg: dailySummaries.weightKg })
           .from(dailySummaries)
@@ -72,15 +65,15 @@ export const dailyRouter = createTRPCRouter({
           fiberG: Number(totals?.fiberG ?? 0),
         },
         targets: {
-          calories: profile?.dailyCalorieTarget ?? 2000,
-          proteinG: profile?.proteinTargetG ?? 150,
-          carbsG: profile?.carbsTargetG ?? 200,
-          fatG: profile?.fatTargetG ?? 65,
-          fiberG: profile?.fiberTargetG ?? 25,
+          calories: profile?.daily_calorie_target ?? 2000,
+          proteinG: profile?.protein_target_g ?? 150,
+          carbsG: profile?.carbs_target_g ?? 200,
+          fatG: profile?.fat_target_g ?? 65,
+          fiberG: profile?.fiber_target_g ?? 25,
         },
         weight: summary?.weightKg ? Number(summary.weightKg) : null,
-        mealTypes: (profile?.mealTypes as string[] | null) ?? ["Breakfast", "Lunch", "Dinner", "Snack"],
-        hasAiKey: !!profile?.encryptedApiKey,
+        mealTypes: (profile?.meal_types as string[] | null) ?? ["Breakfast", "Lunch", "Dinner", "Snack"],
+        hasAiKey: !!profile?.encrypted_api_key,
       };
     }),
 
