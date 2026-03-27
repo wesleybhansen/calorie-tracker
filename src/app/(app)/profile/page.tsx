@@ -206,7 +206,7 @@ export default function ProfilePage() {
       },
       {
         onSuccess: () => toast.success("Targets saved"),
-        onError: () => toast.error("Failed to save targets"),
+        onError: (err) => toast.error(`Failed to save targets: ${err.message}`),
       },
     );
   };
