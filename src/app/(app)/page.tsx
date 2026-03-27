@@ -134,27 +134,7 @@ export default function DashboardPage() {
   const dateStr = format(selectedDate, "yyyy-MM-dd");
   const utils = trpc.useUtils();
 
-  // ─── Onboarding check ──────────────────────────────────────────
-  const onboardProfileQuery = trpc.user.getProfile.useQuery();
-  const todayStr = format(new Date(), "yyyy-MM-dd");
-  const onboardMealsQuery = trpc.meals.getByDate.useQuery(
-    { date: todayStr },
-    { enabled: !!onboardProfileQuery.data },
-  );
-
-  useEffect(() => {
-    if (!onboardProfileQuery.data || onboardMealsQuery.isLoading) return;
-    const profile = onboardProfileQuery.data;
-    const meals = onboardMealsQuery.data;
-    const hasNoMeals =
-      !meals || Object.keys(meals).length === 0 ||
-      Object.values(meals).every((logs) => logs.length === 0);
-    const isDefaultTarget = profile.dailyCalorieTarget === 2000;
-
-    if (isDefaultTarget && hasNoMeals) {
-      router.push("/onboarding");
-    }
-  }, [onboardProfileQuery.data, onboardMealsQuery.data, onboardMealsQuery.isLoading, router]);
+  // ─── Onboarding check (uses profileQuery defined below) ────────
 
   // ─── Pull-to-refresh state ─────────────────────────────────────
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -229,8 +209,23 @@ export default function DashboardPage() {
   // ─── Queries ─────────────────────────────────────────────────
   const dailyQuery = trpc.daily.get.useQuery({ date: dateStr });
   const mealsQuery = trpc.meals.getByDate.useQuery({ date: dateStr });
-  // Profile data comes from daily.get now (mealTypes + hasAiKey)
-  const hasAiKey = !!dailyQuery.data?.hasAiKey;
+  const profileQuery = trpc.user.getProfile.useQuery();
+  const hasAiKey = !!profileQuery.data?.encryptedApiKey;
+
+  // ─── Onboarding check ──────────────────────────────────────────
+  useEffect(() => {
+    if (!profileQuery.data || mealsQuery.isLoading) return;
+    const profile = profileQuery.data;
+    const meals = mealsQuery.data;
+    const hasNoMeals =
+      !meals || Object.keys(meals).length === 0 ||
+      Object.values(meals).every((logs: unknown[]) => logs.length === 0);
+    const isDefaultTarget = profile.dailyCalorieTarget === 2000;
+
+    if (isDefaultTarget && hasNoMeals) {
+      router.push("/onboarding");
+    }
+  }, [profileQuery.data, mealsQuery.data, mealsQuery.isLoading, router]);
 
   // ─── Mutations ───────────────────────────────────────────────
   const deleteEntry = trpc.meals.deleteEntry.useMutation({
@@ -320,7 +315,8 @@ export default function DashboardPage() {
   }, [trainingEnabled, isTraining, trainingTargets, serverTargets]);
 
   // Use profile meal types (ordered by user) or fallback
-  const userMealTypes: string[] = dailyQuery.data?.mealTypes ?? FALLBACK_MEAL_TYPES;
+  // Read directly from user.getProfile (not daily.get) so changes are immediate
+  const userMealTypes: string[] = (profileQuery.data?.mealTypes as string[] | null) ?? FALLBACK_MEAL_TYPES;
 
   // Build meal sections from API data
   const mealSections = useMemo(() => {
