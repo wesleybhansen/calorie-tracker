@@ -34,25 +34,34 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: Record<string, any> = { updatedAt: new Date() };
-      if (input.displayName !== undefined) data.displayName = input.displayName;
-      if (input.dailyCalorieTarget !== undefined) data.dailyCalorieTarget = input.dailyCalorieTarget;
-      if (input.proteinTargetG !== undefined) data.proteinTargetG = input.proteinTargetG;
-      if (input.carbsTargetG !== undefined) data.carbsTargetG = input.carbsTargetG;
-      if (input.fatTargetG !== undefined) data.fatTargetG = input.fatTargetG;
-      if (input.fiberTargetG !== undefined) data.fiberTargetG = input.fiberTargetG;
-      if (input.mealTypes !== undefined) data.mealTypes = JSON.stringify(input.mealTypes);
-      if (input.aiProvider !== undefined) data.aiProvider = input.aiProvider;
-      if (input.encryptedApiKey !== undefined) data.encryptedApiKey = input.encryptedApiKey;
-      if (input.units !== undefined) data.units = input.units;
+      // Use Supabase client (PostgREST) for updates — it handles jsonb natively
+      // and goes through the authenticated connection
+      const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
+      if (input.displayName !== undefined) updateData.display_name = input.displayName;
+      if (input.dailyCalorieTarget !== undefined) updateData.daily_calorie_target = input.dailyCalorieTarget;
+      if (input.proteinTargetG !== undefined) updateData.protein_target_g = input.proteinTargetG;
+      if (input.carbsTargetG !== undefined) updateData.carbs_target_g = input.carbsTargetG;
+      if (input.fatTargetG !== undefined) updateData.fat_target_g = input.fatTargetG;
+      if (input.fiberTargetG !== undefined) updateData.fiber_target_g = input.fiberTargetG;
+      if (input.mealTypes !== undefined) updateData.meal_types = input.mealTypes;
+      if (input.aiProvider !== undefined) updateData.ai_provider = input.aiProvider;
+      if (input.encryptedApiKey !== undefined) updateData.encrypted_api_key = input.encryptedApiKey;
+      if (input.units !== undefined) updateData.units = input.units;
 
-      const [updated] = await ctx.db
-        .update(profiles)
-        .set(data)
+      const { error } = await ctx.supabase
+        .from("profiles")
+        .update(updateData)
+        .eq("id", ctx.user.id);
+
+      if (error) throw new Error(error.message);
+
+      // Return updated profile via Drizzle (reads work fine)
+      const [profile] = await ctx.db
+        .select()
+        .from(profiles)
         .where(eq(profiles.id, ctx.user.id))
-        .returning();
+        .limit(1);
 
-      return updated;
+      return profile;
     }),
 });
