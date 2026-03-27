@@ -4,6 +4,26 @@ import {
   protectedProcedure,
 } from "../init";
 
+// Convert Supabase snake_case response to camelCase for the frontend
+function normalizeProfile(data: Record<string, unknown>) {
+  return {
+    id: data.id as string,
+    displayName: data.display_name as string | null,
+    avatarUrl: data.avatar_url as string | null,
+    dailyCalorieTarget: data.daily_calorie_target as number | null,
+    proteinTargetG: data.protein_target_g as number | null,
+    carbsTargetG: data.carbs_target_g as number | null,
+    fatTargetG: data.fat_target_g as number | null,
+    fiberTargetG: data.fiber_target_g as number | null,
+    mealTypes: data.meal_types as string[] | null,
+    aiProvider: data.ai_provider as string | null,
+    encryptedApiKey: data.encrypted_api_key as string | null,
+    units: data.units as string | null,
+    createdAt: data.created_at as string | null,
+    updatedAt: data.updated_at as string | null,
+  };
+}
+
 export const userRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
     const { data, error } = await ctx.supabase
@@ -13,7 +33,7 @@ export const userRouter = createTRPCRouter({
       .single();
 
     if (error) throw new Error(error.message);
-    return data;
+    return normalizeProfile(data);
   }),
 
   updateProfile: protectedProcedure
@@ -33,8 +53,6 @@ export const userRouter = createTRPCRouter({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      // Use Supabase client (PostgREST) for updates — it handles jsonb natively
-      // and goes through the authenticated connection
       const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() };
       if (input.displayName !== undefined) updateData.display_name = input.displayName;
       if (input.dailyCalorieTarget !== undefined) updateData.daily_calorie_target = input.dailyCalorieTarget;
@@ -47,7 +65,7 @@ export const userRouter = createTRPCRouter({
       if (input.encryptedApiKey !== undefined) updateData.encrypted_api_key = input.encryptedApiKey;
       if (input.units !== undefined) updateData.units = input.units;
 
-      const { data: updatedRows, error } = await ctx.supabase
+      const { data, error } = await ctx.supabase
         .from("profiles")
         .update(updateData)
         .eq("id", ctx.user.id)
@@ -56,6 +74,6 @@ export const userRouter = createTRPCRouter({
 
       if (error) throw new Error(`Update failed: ${error.message}`);
 
-      return updatedRows;
+      return normalizeProfile(data);
     }),
 });
