@@ -37,16 +37,26 @@ export const userRouter = createTRPCRouter({
       // Separate mealTypes update from everything else
       // to handle jsonb properly
       if (input.mealTypes !== undefined) {
-        // postgres.js converts JS arrays to pg arrays even after JSON.stringify.
-        // Force it to be treated as text by wrapping with sql.raw for the value
-        // and using a param only for the user id.
-        const jsonStr = JSON.stringify(input.mealTypes).replace(/'/g, "''");
-        await ctx.db.execute(
-          sql.join([
-            sql.raw(`UPDATE profiles SET meal_types = '${jsonStr}'::jsonb, updated_at = now() WHERE id = `),
-            sql`${ctx.user.id}`,
-          ])
-        );
+        try {
+          const jsonStr = JSON.stringify(input.mealTypes).replace(/'/g, "''");
+          await ctx.db.execute(
+            sql.join([
+              sql.raw(`UPDATE profiles SET meal_types = '${jsonStr}'::jsonb, updated_at = now() WHERE id = `),
+              sql`${ctx.user.id}`,
+            ])
+          );
+        } catch (e: any) {
+          console.error("mealTypes update failed:", {
+            message: e?.message,
+            code: e?.code,
+            detail: e?.detail,
+            hint: e?.hint,
+            severity: e?.severity,
+            routine: e?.routine,
+            full: JSON.stringify(e, Object.getOwnPropertyNames(e)),
+          });
+          throw new Error(`Meal types update failed: ${e?.message ?? e?.code ?? 'unknown'} | detail: ${e?.detail ?? 'none'} | hint: ${e?.hint ?? 'none'}`);
+        }
       }
 
       // Handle non-mealTypes fields
