@@ -98,6 +98,7 @@ export default function ProfilePage() {
   const updateProfile = trpc.user.updateProfile.useMutation({
     onSuccess: () => {
       utils.user.getProfile.invalidate();
+      utils.daily.get.invalidate(); // Dashboard reads mealTypes from daily.get
     },
   });
 
