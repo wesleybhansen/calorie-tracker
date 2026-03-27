@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
@@ -37,12 +37,14 @@ export const userRouter = createTRPCRouter({
       // Separate mealTypes update from everything else
       // to handle jsonb properly
       if (input.mealTypes !== undefined) {
+        // Must use sql`` to cast the JSON string to jsonb explicitly
+        // because postgres.js with prepare:false sends arrays as pg arrays, not jsonb
         await ctx.db
           .update(profiles)
           .set({
-            mealTypes: input.mealTypes,
+            mealTypes: sql`${JSON.stringify(input.mealTypes)}::jsonb`,
             updatedAt: new Date(),
-          })
+          } as any)
           .where(eq(profiles.id, ctx.user.id));
       }
 
