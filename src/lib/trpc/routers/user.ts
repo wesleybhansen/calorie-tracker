@@ -1,10 +1,11 @@
 import { z } from "zod";
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import {
   createTRPCRouter,
   protectedProcedure,
 } from "../init";
 import { profiles } from "@/db/schema";
+import { pgSql } from "@/db";
 
 export const userRouter = createTRPCRouter({
   getProfile: protectedProcedure.query(async ({ ctx }) => {
@@ -37,26 +38,12 @@ export const userRouter = createTRPCRouter({
       // Separate mealTypes update from everything else
       // to handle jsonb properly
       if (input.mealTypes !== undefined) {
-        try {
-          const jsonStr = JSON.stringify(input.mealTypes).replace(/'/g, "''");
-          await ctx.db.execute(
-            sql.join([
-              sql.raw(`UPDATE profiles SET meal_types = '${jsonStr}'::jsonb, updated_at = now() WHERE id = `),
-              sql`${ctx.user.id}`,
-            ])
-          );
-        } catch (e: any) {
-          console.error("mealTypes update failed:", {
-            message: e?.message,
-            code: e?.code,
-            detail: e?.detail,
-            hint: e?.hint,
-            severity: e?.severity,
-            routine: e?.routine,
-            full: JSON.stringify(e, Object.getOwnPropertyNames(e)),
-          });
-          throw new Error(`Meal types update failed: ${e?.message ?? e?.code ?? 'unknown'} | detail: ${e?.detail ?? 'none'} | hint: ${e?.hint ?? 'none'}`);
-        }
+        // Use postgres.js directly — Drizzle cannot handle jsonb params through pgbouncer
+        await pgSql`
+          UPDATE profiles
+          SET meal_types = ${pgSql.json(input.mealTypes)}, updated_at = now()
+          WHERE id = ${ctx.user.id}
+        `;
       }
 
       // Handle non-mealTypes fields
