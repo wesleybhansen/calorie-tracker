@@ -102,13 +102,21 @@ export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
   }
   url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`USDA API error: ${res.status} ${res.statusText}`);
+  let foods: USDAFoodItem[] = [];
+  try {
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      console.error(
+        `[searchUSDA] ${res.status} ${res.statusText} — key=${process.env.USDA_API_KEY ? "set" : "MISSING"}`,
+      );
+      return [];
+    }
+    const data = (await res.json()) as { foods?: USDAFoodItem[] };
+    foods = data.foods ?? [];
+  } catch (err) {
+    console.error("[searchUSDA] fetch failed", err);
+    return [];
   }
-
-  const data = (await res.json()) as { foods: USDAFoodItem[] };
-  const foods = data.foods ?? [];
 
   // Rank by relevance + data-type quality, then drop near-duplicates.
   const ranked = foods
