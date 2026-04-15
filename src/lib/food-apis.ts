@@ -92,49 +92,66 @@ function dataTypeBonus(dataType?: string): number {
   }
 }
 
-export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
+async function fetchUSDA(
+  query: string,
+  dataTypes: string[],
+  pageSize: number,
+): Promise<USDAFoodItem[]> {
   const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
   url.searchParams.set("query", query);
-  url.searchParams.set("pageSize", "50");
-  // USDA expects `dataType` as repeated query params, not comma-joined.
-  for (const dt of ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"]) {
-    url.searchParams.append("dataType", dt);
-  }
+  url.searchParams.set("pageSize", pageSize.toString());
+  for (const dt of dataTypes) url.searchParams.append("dataType", dt);
   url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
 
-  let foods: USDAFoodItem[] = [];
   try {
     const res = await fetch(url.toString());
     if (!res.ok) {
       console.error(
-        `[searchUSDA] ${res.status} ${res.statusText} — key=${process.env.USDA_API_KEY ? "set" : "MISSING"}`,
+        `[fetchUSDA] ${res.status} ${res.statusText} for ${dataTypes.join(",")} — key=${process.env.USDA_API_KEY ? "set" : "MISSING"}`,
       );
       return [];
     }
     const data = (await res.json()) as { foods?: USDAFoodItem[] };
-    foods = data.foods ?? [];
+    return data.foods ?? [];
   } catch (err) {
-    console.error("[searchUSDA] fetch failed", err);
+    console.error("[fetchUSDA] fetch failed", err);
     return [];
   }
+}
 
-  // Rank by relevance + data-type quality, then drop near-duplicates.
-  const ranked = foods
-    .map((f) => ({
-      food: f,
-      score: relevanceScore(f.description, query) + dataTypeBonus(f.dataType),
-    }))
-    .filter((r) => r.score > 0)
-    .sort((a, b) => b.score - a.score);
+export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
+  // Split into two parallel queries: whole-foods (Foundation, SR Legacy,
+  // Survey) get their own slots, so basic items like "banana" or "egg"
+  // aren't buried under thousands of branded products that happen to
+  // contain the word.
+  const [wholeFoods, branded] = await Promise.all([
+    fetchUSDA(query, ["Foundation", "SR Legacy", "Survey (FNDDS)"], 25),
+    fetchUSDA(query, ["Branded"], 25),
+  ]);
+
+  const rank = (foods: USDAFoodItem[]) =>
+    foods
+      .map((f) => ({
+        food: f,
+        score: relevanceScore(f.description, query) + dataTypeBonus(f.dataType),
+      }))
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.food);
+
+  const rankedWhole = rank(wholeFoods);
+  const rankedBranded = rank(branded);
+
+  // Interleave: whole-foods first (up to 10), then branded fills the rest.
+  const combined = [...rankedWhole.slice(0, 10), ...rankedBranded];
 
   const seen = new Set<string>();
   const deduped: USDAFoodItem[] = [];
-  for (const { food } of ranked) {
+  for (const food of combined) {
     const key = `${food.description.toLowerCase()}|${(food.brandName ?? food.brandOwner ?? "").toLowerCase()}`;
     if (seen.has(key)) continue;
     seen.add(key);
     deduped.push(food);
-    if (deduped.length >= 25) break;
+    if (deduped.length >= 30) break;
   }
 
   return deduped.map(normalizeUSDA);
