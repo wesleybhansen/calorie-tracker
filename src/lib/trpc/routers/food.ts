@@ -9,7 +9,12 @@ import {
   mealLogEntries,
   mealLogs,
 } from "@/db/schema";
-import { searchUSDA as searchUSDAApi, getOpenFoodFactsByBarcode } from "@/lib/food-apis";
+import {
+  searchUSDA as searchUSDAApi,
+  getOpenFoodFactsByBarcode,
+  getUSDAByBarcode,
+  type NormalizedFood,
+} from "@/lib/food-apis";
 
 export const foodRouter = createTRPCRouter({
   // ─── search local food_items ───────────────────────────────────
@@ -50,28 +55,58 @@ export const foodRouter = createTRPCRouter({
 
       if (local) return local;
 
-      // Fetch from Open Food Facts
-      const off = await getOpenFoodFactsByBarcode(input.barcode);
-      if (!off) return null;
+      // Query Open Food Facts and USDA Branded in parallel, then pick the
+      // result with the most complete nutrition data. OFF has broader barcode
+      // coverage but often has zero/missing nutrients; USDA Branded has
+      // cleaner data but smaller catalog.
+      const [offResult, usdaResult] = await Promise.allSettled([
+        getOpenFoodFactsByBarcode(input.barcode),
+        getUSDAByBarcode(input.barcode),
+      ]);
 
-      // Cache in local DB
+      const off = offResult.status === "fulfilled" ? offResult.value : null;
+      const usda = usdaResult.status === "fulfilled" ? usdaResult.value : null;
+
+      const score = (f: NormalizedFood | null): number => {
+        if (!f) return -1;
+        let s = 0;
+        if (f.calories > 0) s += 10;
+        if (f.proteinG > 0) s += 2;
+        if (f.carbsG > 0) s += 2;
+        if (f.fatG > 0) s += 2;
+        if (f.name && f.name !== "Unknown Product") s += 1;
+        return s;
+      };
+
+      const pick: { food: NormalizedFood; source: string } | null =
+        score(usda) > score(off)
+          ? usda
+            ? { food: usda, source: "usda" }
+            : null
+          : off
+            ? { food: off, source: "openfoodfacts" }
+            : null;
+
+      if (!pick) return null;
+
+      // Cache in local DB so repeat scans are instant.
       const [inserted] = await ctx.db
         .insert(foodItems)
         .values({
-          name: off.name,
-          brand: off.brand,
-          barcode: off.barcode,
-          calories: off.calories.toString(),
-          proteinG: off.proteinG.toString(),
-          carbsG: off.carbsG.toString(),
-          fatG: off.fatG.toString(),
-          fiberG: off.fiberG.toString(),
-          sugarG: off.sugarG.toString(),
-          sodiumMg: off.sodiumMg.toString(),
-          servingSize: off.servingSize,
-          servingUnit: off.servingUnit,
-          source: "openfoodfacts",
-          sourceId: off.sourceId,
+          name: pick.food.name,
+          brand: pick.food.brand,
+          barcode: pick.food.barcode ?? input.barcode,
+          calories: pick.food.calories.toString(),
+          proteinG: pick.food.proteinG.toString(),
+          carbsG: pick.food.carbsG.toString(),
+          fatG: pick.food.fatG.toString(),
+          fiberG: pick.food.fiberG.toString(),
+          sugarG: pick.food.sugarG.toString(),
+          sodiumMg: pick.food.sodiumMg.toString(),
+          servingSize: pick.food.servingSize,
+          servingUnit: pick.food.servingUnit,
+          source: pick.source,
+          sourceId: pick.food.sourceId,
           createdBy: ctx.user.id,
         })
         .returning();

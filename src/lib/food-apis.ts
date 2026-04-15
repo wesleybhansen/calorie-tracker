@@ -29,8 +29,10 @@ interface USDAFoodItem {
   description: string;
   brandName?: string;
   brandOwner?: string;
+  dataType?: string;
   servingSize?: number;
   servingSizeUnit?: string;
+  gtinUpc?: string;
   foodNutrients: USDANutrient[];
 }
 
@@ -38,20 +40,8 @@ function extractUSDANutrient(nutrients: USDANutrient[], id: number): number {
   return nutrients.find((n) => n.nutrientId === id)?.value ?? 0;
 }
 
-export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
-  const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
-  url.searchParams.set("query", query);
-  url.searchParams.set("pageSize", "10");
-  url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
-
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`USDA API error: ${res.status} ${res.statusText}`);
-  }
-
-  const data = (await res.json()) as { foods: USDAFoodItem[] };
-
-  return (data.foods ?? []).map((food) => ({
+function normalizeUSDA(food: USDAFoodItem): NormalizedFood {
+  return {
     name: food.description,
     brand: food.brandName ?? food.brandOwner ?? null,
     calories: extractUSDANutrient(food.foodNutrients, 1008),
@@ -63,9 +53,109 @@ export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
     sodiumMg: extractUSDANutrient(food.foodNutrients, 1093),
     servingSize: food.servingSize?.toString() ?? null,
     servingUnit: food.servingSizeUnit ?? null,
-    barcode: null,
+    barcode: food.gtinUpc ?? null,
     sourceId: food.fdcId.toString(),
-  }));
+  };
+}
+
+// Score a result against the query: higher is better.
+// Exact > starts-with > whole-word match > substring > no match.
+function relevanceScore(description: string, query: string): number {
+  const d = description.toLowerCase().trim();
+  const q = query.toLowerCase().trim();
+  if (!q) return 0;
+  if (d === q) return 100;
+  if (d.startsWith(q + " ") || d.startsWith(q + ",")) return 80;
+  if (d.startsWith(q)) return 70;
+  // Whole-word match: all query words appear as separate tokens
+  const words = new Set(d.split(/[^a-z0-9]+/).filter(Boolean));
+  const qWords = q.split(/[^a-z0-9]+/).filter(Boolean);
+  const wholeWordHits = qWords.filter((w) => words.has(w)).length;
+  if (wholeWordHits === qWords.length) return 50 + wholeWordHits;
+  if (d.includes(q)) return 30;
+  return wholeWordHits * 5;
+}
+
+// Data-type priority: Foundation (whole foods w/ rich data) > SR Legacy > Branded > Survey.
+function dataTypeBonus(dataType?: string): number {
+  switch (dataType) {
+    case "Foundation":
+      return 8;
+    case "SR Legacy":
+      return 6;
+    case "Branded":
+      return 4;
+    case "Survey (FNDDS)":
+      return 2;
+    default:
+      return 0;
+  }
+}
+
+export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
+  const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+  url.searchParams.set("query", query);
+  url.searchParams.set("pageSize", "50");
+  url.searchParams.set(
+    "dataType",
+    "Foundation,SR Legacy,Branded,Survey (FNDDS)",
+  );
+  url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
+
+  const res = await fetch(url.toString());
+  if (!res.ok) {
+    throw new Error(`USDA API error: ${res.status} ${res.statusText}`);
+  }
+
+  const data = (await res.json()) as { foods: USDAFoodItem[] };
+  const foods = data.foods ?? [];
+
+  // Rank by relevance + data-type quality, then drop near-duplicates.
+  const ranked = foods
+    .map((f) => ({
+      food: f,
+      score: relevanceScore(f.description, query) + dataTypeBonus(f.dataType),
+    }))
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score);
+
+  const seen = new Set<string>();
+  const deduped: USDAFoodItem[] = [];
+  for (const { food } of ranked) {
+    const key = `${food.description.toLowerCase()}|${(food.brandName ?? food.brandOwner ?? "").toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(food);
+    if (deduped.length >= 25) break;
+  }
+
+  return deduped.map(normalizeUSDA);
+}
+
+// Look up a branded product in USDA by its GTIN/UPC barcode.
+// USDA stores GTIN-14; consumer UPC-A codes (12 digits) are often padded with
+// leading zeros, so we match on the normalized numeric tail.
+export async function getUSDAByBarcode(
+  barcode: string,
+): Promise<NormalizedFood | null> {
+  const normalized = barcode.replace(/^0+/, "");
+  const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
+  url.searchParams.set("query", barcode);
+  url.searchParams.set("dataType", "Branded");
+  url.searchParams.set("pageSize", "10");
+  url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
+
+  const res = await fetch(url.toString());
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as { foods: USDAFoodItem[] };
+  const match = (data.foods ?? []).find((f) => {
+    if (!f.gtinUpc) return false;
+    const g = f.gtinUpc.replace(/^0+/, "").trim();
+    return g === normalized || g === barcode;
+  });
+
+  return match ? normalizeUSDA(match) : null;
 }
 
 // ─── Open Food Facts ───────────────────────────────────────────────
