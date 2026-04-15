@@ -96,10 +96,10 @@ export async function searchUSDA(query: string): Promise<NormalizedFood[]> {
   const url = new URL("https://api.nal.usda.gov/fdc/v1/foods/search");
   url.searchParams.set("query", query);
   url.searchParams.set("pageSize", "50");
-  url.searchParams.set(
-    "dataType",
-    "Foundation,SR Legacy,Branded,Survey (FNDDS)",
-  );
+  // USDA expects `dataType` as repeated query params, not comma-joined.
+  for (const dt of ["Foundation", "SR Legacy", "Branded", "Survey (FNDDS)"]) {
+    url.searchParams.append("dataType", dt);
+  }
   url.searchParams.set("api_key", process.env.USDA_API_KEY ?? "DEMO_KEY");
 
   const res = await fetch(url.toString());
@@ -173,7 +173,8 @@ export async function getOpenFoodFactsByBarcode(
   barcode: string,
 ): Promise<NormalizedFood | null> {
   const res = await fetch(
-    `https://world.openfoodfacts.net/api/v2/product/${encodeURIComponent(barcode)}`,
+    `https://world.openfoodfacts.org/api/v2/product/${encodeURIComponent(barcode)}.json`,
+    { headers: { "User-Agent": "CalorieTracker/1.0 (wesley.b.hansen@gmail.com)" } },
   );
   if (!res.ok) return null;
 
